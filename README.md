@@ -22,7 +22,7 @@ EMR Cluster [25BBDF-emr]   ← PySpark preprocessing + EDA
 S3 (Processed JSONL — train/val/test)
        │                         ┌─────────────────────────┐
        ▼                         │  Google Colab (T4 GPU)  │
-Fine-Tuning (Unsloth QLoRA)  ◄──┤  fine_tuning.ipynb      │
+Fine-Tuning (Unsloth QLoRA).  ◄──┤  fine_tuning.ipynb      │
        │                         └─────────────────────────┘
        ▼
 S3 (horus-llama3-osint-Q4_K_M.gguf)
