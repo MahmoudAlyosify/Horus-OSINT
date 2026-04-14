@@ -201,11 +201,11 @@ resource "aws_security_group" "sg" {
 #  cluster and EC2 instance can both access data independently.
 # =============================================================================
 resource "aws_s3_bucket" "datalake" {
-  bucket        = "${local.prefix}-bucket"
+  bucket        = "Horus-${local.prefix}-bucket"
   force_destroy = true   # Allows terraform destroy to empty the bucket
 
   tags = {
-    Name    = "${local.prefix}-bucket"
+    Name    = "Horus-${local.prefix}-bucket"
     Project = "Horus-OSINT"
     NetID   = local.netid
   }
