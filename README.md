@@ -20,6 +20,7 @@ EMR Cluster [25BBDF-emr]   ← PySpark preprocessing + EDA
        │
        ▼
 S3 (Processed JSONL — train/val/test)
+       │
        │                         ┌─────────────────────────┐
        ▼                         │  Google Colab (T4 GPU)  │
 Fine-Tuning (Unsloth QLoRA).  ◄──┤  fine_tuning.ipynb      │
@@ -70,7 +71,7 @@ User Browser  →  http://<ec2-public-ip>:8080
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/horus-osint.git
+git clone https://github.com/MahmoudAlyosify/Horus-OSINT
 cd horus-osint
 
 # Initialise Terraform providers
