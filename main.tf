@@ -31,8 +31,8 @@ provider "aws" {
 #  LOCALS — all names follow the mandatory <netID>-<resource> policy
 # =============================================================================
 locals {
-  netid  = "25BBDF"
-  prefix = "25BBDF"    # Every AWS resource name starts with this
+  netid  = "25bbdf"
+  prefix = "25bbdf"    # Every AWS resource name starts with this
 
   # CIDR blocks — /16 gives 65,536 addresses for the VPC;
   # /24 gives 256 addresses for the single public subnet.
