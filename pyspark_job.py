@@ -3,57 +3,47 @@
 #  Horus-OSINT: Data Preprocessing Pipeline (AWS EMR / PySpark)
 #  Student NetID : 25bbdf-g23
 #
-#  FIXES applied for Queen's Sandbox EMR (vs original):
-#    1. Removed multiLine=True  → was causing S3 read hangs on large CSVs
-#    2. Fixed GDELT glob pattern → removed ".export" suffix (wrong filename)
-#    3. Removed post-write count() → was recomputing full DAG, wasting cost
-#    4. Renamed UDF param gdelt_count → gdelt_evt_count → avoids column clash
-#    5. Added spark.hadoop.fs.s3.impl config → explicit EMR 7.x S3 connector
+#  CONFIRMED CONFIG:
+#    Bucket  : horus-25bbdf-g23-bucket
+#    GTD file: raw/gtd/GTD_Merged_Full.csv
+#    GDELT   : MANDATORY (s3://gdelt-open-data/events/)
 #
-#  EMR Step Arguments field:
-#    --bucket horus-25bbdf-g23-bucket
+#  EMR Step — Application location:
+#    s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 #
-#  Usage (local test):
-#    spark-submit pyspark_job.py --bucket horus-25bbdf-g23-bucket
+#  EMR Step — Arguments field:
+#    (leave EMPTY — all config is hardcoded below)
 # =============================================================================
 
 import sys
 import json
-import argparse
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
 
 # ---------------------------------------------------------------------------
-# 0. Argument Parsing
+# 0. Hardcoded Config
 # ---------------------------------------------------------------------------
-parser = argparse.ArgumentParser(description="Horus-OSINT PySpark Preprocessing")
-parser.add_argument("--bucket",      default="horus-25bbdf-g23-bucket")
-parser.add_argument("--gtd_key",     default="raw/gtd/gtd_merged.csv")
-parser.add_argument("--gdelt_years", default="2015,2016,2017,2018,2019")
-parser.add_argument("--max_records", type=int, default=200_000)
-args, _ = parser.parse_known_args()
+BUCKET      = "horus-25bbdf-g23-bucket"
+GTD_KEY     = "raw/gtd/GTD_Merged_Full.csv"
+GDELT_YEARS = ["2015", "2016", "2017", "2018", "2019"]
+MAX_RECORDS = 200_000
+NETID       = "25bbdf-g23"
 
-NETID        = "25bbdf-g23"
-S3_BUCKET    = f"s3://{args.bucket}"
-GTD_RAW_PATH = f"{S3_BUCKET}/{args.gtd_key}"
+S3_BUCKET    = f"s3://{BUCKET}"
+GTD_RAW_PATH = f"{S3_BUCKET}/{GTD_KEY}"
 OUTPUT_PATH  = f"{S3_BUCKET}/processed"
-GDELT_YEARS  = [y.strip() for y in args.gdelt_years.split(",")]
+GDELT_GLOBS  = [f"s3://gdelt-open-data/events/{y}*.CSV" for y in GDELT_YEARS]
 
-# FIX #2: Correct GDELT V1 public bucket filename pattern.
-# Real filenames: s3://gdelt-open-data/events/20150101.CSV  (NO ".export" suffix)
-GDELT_GLOBS = [
-    f"s3://gdelt-open-data/events/{year}*.CSV"
-    for year in GDELT_YEARS
-]
-
+print("=" * 65)
 print(f"[CONFIG] Bucket    : {S3_BUCKET}")
 print(f"[CONFIG] GTD source: {GTD_RAW_PATH}")
-print(f"[CONFIG] GDELT glob: {GDELT_GLOBS}")
+print(f"[CONFIG] GDELT     : {len(GDELT_YEARS)} years ({GDELT_YEARS[0]}–{GDELT_YEARS[-1]})")
 print(f"[CONFIG] Output    : {OUTPUT_PATH}")
+print("=" * 65)
 
 # ---------------------------------------------------------------------------
-# 1. Spark Session — tuned for m5.xlarge (4 vCPU, 16 GB) × 2 core nodes
+# 1. Spark Session
 # ---------------------------------------------------------------------------
 spark = (
     SparkSession.builder
@@ -61,19 +51,22 @@ spark = (
     .config("spark.sql.shuffle.partitions", "100")
     .config("spark.sql.adaptive.enabled", "true")
     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-    # FIX #5: Explicit S3 connector for EMR 7.x — avoids s3a:// vs s3:// confusion
     .config("spark.hadoop.fs.s3.impl",
             "com.amazon.ws.emr.hadoop.fs.EmrFileSystem")
     .config("spark.hadoop.fs.s3a.impl",
             "org.apache.hadoop.fs.s3a.S3AFileSystem")
+    .config("spark.network.timeout",             "800s")
+    .config("spark.executor.heartbeatInterval",  "60s")
+    .config("spark.sql.broadcastTimeout",        "600")
     .getOrCreate()
 )
 spark.sparkContext.setLogLevel("WARN")
-print("[*] Spark Session started.")
+print("[*] Spark Session started OK.")
 
 # ---------------------------------------------------------------------------
-# 2. Ingest GTD Data
+# 2. Ingest GTD  (GTD_Merged_Full.csv)
 # ---------------------------------------------------------------------------
+# Official GTD column names — these must match exactly what's in your CSV header.
 GTD_COLUMNS = {
     "iyear":           "year",
     "country_txt":     "country",
@@ -86,29 +79,41 @@ GTD_COLUMNS = {
     "summary":         "summary",
 }
 
+print(f"[GTD] Reading: {GTD_RAW_PATH}")
 try:
     gtd_raw = (
         spark.read
-        .option("header", "true")
+        .option("header",  "true")
         .option("inferSchema", "false")
-        # FIX #1: multiLine=True removed — causes S3 read hangs on >100MB CSVs.
-        # GTD summaries may contain newlines but Spark handles most cases without it.
-        # .option("multiLine", "true")   ← REMOVED
-        .option("escape", '"')
-        .option("quote", '"')
-        .option("mode", "PERMISSIVE")   # don't crash on malformed rows
+        .option("escape",  '"')
+        .option("quote",   '"')
+        .option("mode",    "PERMISSIVE")
         .csv(GTD_RAW_PATH)
     )
+
+    actual_cols = gtd_raw.columns
+    print(f"[GTD] Total columns in CSV : {len(actual_cols)}")
+    print(f"[GTD] First 15 column names: {actual_cols[:15]}")
+
+    missing = [src for src in GTD_COLUMNS if src not in actual_cols]
+    if missing:
+        print(f"[GTD] WARNING — expected columns not found: {missing}")
 
     select_exprs = [
         F.col(src).alias(dst)
         for src, dst in GTD_COLUMNS.items()
-        if src in gtd_raw.columns
+        if src in actual_cols
     ]
-    gtd_df = gtd_raw.select(select_exprs)
+
+    if not select_exprs:
+        print("[GTD] FATAL — none of the expected GTD columns exist in the CSV!")
+        print(f"[GTD] Expected : {list(GTD_COLUMNS.keys())}")
+        print(f"[GTD] Found    : {actual_cols[:20]}")
+        spark.stop()
+        sys.exit(1)
 
     gtd_df = (
-        gtd_df
+        gtd_raw.select(select_exprs)
         .withColumn("year",   F.col("year").cast("int"))
         .withColumn("kills",  F.coalesce(F.col("kills").cast("double"),  F.lit(0.0)))
         .withColumn("wounds", F.coalesce(F.col("wounds").cast("double"), F.lit(0.0)))
@@ -116,54 +121,60 @@ try:
         .filter(F.col("attack_type") != "Unknown")
     )
 
-    if args.max_records > 0:
-        gtd_df = gtd_df.limit(args.max_records)
+    if MAX_RECORDS > 0:
+        gtd_df = gtd_df.limit(MAX_RECORDS)
 
     gtd_count = gtd_df.cache().count()
-    print(f"[GTD] Loaded {gtd_count:,} records after cleaning.")
+    print(f"[GTD] Loaded {gtd_count:,} clean records.")
+
+    if gtd_count == 0:
+        print("[GTD] FATAL — 0 records loaded. Check column names above.")
+        spark.stop()
+        sys.exit(1)
 
 except Exception as exc:
-    print(f"[ERROR] GTD ingest failed: {exc}")
+    print(f"[GTD] FATAL — {exc}")
     spark.stop()
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
-# 3. Ingest & Aggregate GDELT V1
+# 3. Ingest & Aggregate GDELT V1  (MANDATORY)
 # ---------------------------------------------------------------------------
+# GDELT V1 has no header. Column layout:
+#   _c0 = GlobalEventID
+#   _c1 = SQLDATE (YYYYMMDD)  → extract first 4 chars = year
+#   _c7 = Actor1CountryCode   → ISO3 alpha-3 country code
 
 ISO3_TO_NAME = {
-    "AFG": "Afghanistan", "IRQ": "Iraq", "PAK": "Pakistan", "SYR": "Syria",
-    "IND": "India",       "NGA": "Nigeria", "COL": "Colombia", "PHL": "Philippines",
-    "YEM": "Yemen",       "SOM": "Somalia", "LBY": "Libya",   "EGY": "Egypt",
-    "TUR": "Turkey",      "RUS": "Russia",  "UKR": "Ukraine", "GBR": "United Kingdom",
-    "FRA": "France",      "DEU": "Germany", "USA": "United States", "CHN": "China",
-    "BRA": "Brazil",      "MEX": "Mexico",  "IDN": "Indonesia","BGD": "Bangladesh",
-    "THA": "Thailand",    "KEN": "Kenya",   "ETH": "Ethiopia","TZA": "Tanzania",
-    "MDN": "Sudan",       "SDN": "Sudan",   "CMR": "Cameroon","MLI": "Mali",
-    "NER": "Niger",       "BFA": "Burkina Faso","LBN": "Lebanon","ISR": "Israel",
-    "IRN": "Iran",        "SAU": "Saudi Arabia","JOR": "Jordan","MAR": "Morocco",
-    "ALG": "Algeria",     "TUN": "Tunisia", "LKA": "Sri Lanka","NPL": "Nepal",
-    "MMR": "Myanmar",     "KHM": "Cambodia","VNM": "Vietnam", "UZB": "Uzbekistan",
-    "TJK": "Tajikistan",  "KGZ": "Kyrgyzstan","KAZ": "Kazakhstan","AZE": "Azerbaijan",
-    "GEO": "Georgia",     "ARM": "Armenia", "MDA": "Moldova", "BLR": "Belarus",
-    "SRB": "Serbia",      "HRV": "Croatia", "BIH": "Bosnia-Herzegovina",
-    "ALB": "Albania",     "MKD": "North Macedonia","ESP": "Spain","ITA": "Italy",
-    "GRC": "Greece",      "PRT": "Portugal","NLD": "Netherlands","BEL": "Belgium",
-    "CHE": "Switzerland", "AUT": "Austria", "SWE": "Sweden",  "NOR": "Norway",
-    "DNK": "Denmark",     "FIN": "Finland", "POL": "Poland",  "CZE": "Czech Republic",
-    "HUN": "Hungary",     "ROU": "Romania", "BGR": "Bulgaria","SVK": "Slovakia",
-    "ARG": "Argentina",   "CHL": "Chile",   "PER": "Peru",    "VEN": "Venezuela",
-    "ECU": "Ecuador",     "BOL": "Bolivia", "PRY": "Paraguay","URY": "Uruguay",
-    "GTM": "Guatemala",   "HND": "Honduras","SLV": "El Salvador","NIC": "Nicaragua",
-    "CRI": "Costa Rica",  "PAN": "Panama",  "CUB": "Cuba",    "HTI": "Haiti",
-    "DOM": "Dominican Republic","JAM": "Jamaica","TTO": "Trinidad and Tobago",
-    "GHA": "Ghana",       "CIV": "Ivory Coast","SEN": "Senegal","GUI": "Guinea",
-    "SLE": "Sierra Leone","LBR": "Liberia", "COD": "Democratic Republic of the Congo",
-    "COG": "Republic of the Congo","UGA": "Uganda","RWA": "Rwanda","BDI": "Burundi",
-    "MOZ": "Mozambique",  "ZWE": "Zimbabwe","ZMB": "Zambia",  "MWI": "Malawi",
-    "AGO": "Angola",      "NAM": "Namibia", "BWA": "Botswana","ZAF": "South Africa",
-    "AUS": "Australia",   "NZL": "New Zealand","CAN": "Canada","JPN": "Japan",
-    "KOR": "South Korea", "PRK": "North Korea","MNG": "Mongolia","TWN": "Taiwan",
+    "AFG": "Afghanistan",    "IRQ": "Iraq",           "PAK": "Pakistan",
+    "SYR": "Syria",          "IND": "India",          "NGA": "Nigeria",
+    "COL": "Colombia",       "PHL": "Philippines",    "YEM": "Yemen",
+    "SOM": "Somalia",        "LBY": "Libya",          "EGY": "Egypt",
+    "TUR": "Turkey",         "RUS": "Russia",         "UKR": "Ukraine",
+    "GBR": "United Kingdom", "FRA": "France",         "DEU": "Germany",
+    "USA": "United States",  "CHN": "China",          "BRA": "Brazil",
+    "MEX": "Mexico",         "IDN": "Indonesia",      "BGD": "Bangladesh",
+    "THA": "Thailand",       "KEN": "Kenya",          "ETH": "Ethiopia",
+    "SDN": "Sudan",          "CMR": "Cameroon",       "MLI": "Mali",
+    "NER": "Niger",          "BFA": "Burkina Faso",   "LBN": "Lebanon",
+    "ISR": "Israel",         "IRN": "Iran",           "SAU": "Saudi Arabia",
+    "JOR": "Jordan",         "MAR": "Morocco",        "DZA": "Algeria",
+    "TUN": "Tunisia",        "LKA": "Sri Lanka",      "NPL": "Nepal",
+    "MMR": "Myanmar",        "VNM": "Vietnam",        "UZB": "Uzbekistan",
+    "KAZ": "Kazakhstan",     "AZE": "Azerbaijan",     "GEO": "Georgia",
+    "SRB": "Serbia",         "HRV": "Croatia",        "BIH": "Bosnia-Herzegovina",
+    "ESP": "Spain",          "ITA": "Italy",          "GRC": "Greece",
+    "POL": "Poland",         "NLD": "Netherlands",    "BEL": "Belgium",
+    "SWE": "Sweden",         "NOR": "Norway",         "DNK": "Denmark",
+    "ARG": "Argentina",      "CHL": "Chile",          "PER": "Peru",
+    "VEN": "Venezuela",      "GTM": "Guatemala",      "CUB": "Cuba",
+    "HTI": "Haiti",          "DOM": "Dominican Republic",
+    "GHA": "Ghana",          "CIV": "Ivory Coast",    "SEN": "Senegal",
+    "COD": "Democratic Republic of the Congo",
+    "UGA": "Uganda",         "RWA": "Rwanda",         "MOZ": "Mozambique",
+    "ZWE": "Zimbabwe",       "ZAF": "South Africa",   "AGO": "Angola",
+    "AUS": "Australia",      "CAN": "Canada",         "JPN": "Japan",
+    "KOR": "South Korea",    "TWN": "Taiwan",
 }
 
 iso3_broadcast = spark.sparkContext.broadcast(ISO3_TO_NAME)
@@ -174,13 +185,24 @@ def iso3_to_country(code):
         return None
     return iso3_broadcast.value.get(code.strip().upper(), None)
 
+print(f"[GDELT] Reading years {GDELT_YEARS} from s3://gdelt-open-data/events/ ...")
+
 try:
     gdelt_raw = (
         spark.read
         .option("delimiter", "\t")
-        .option("header", "false")
+        .option("header",    "false")
         .csv(GDELT_GLOBS)
     )
+
+    num_gdelt_cols = len(gdelt_raw.columns)
+    print(f"[GDELT] Columns detected: {num_gdelt_cols} (expected 57 for V1)")
+
+    if num_gdelt_cols < 8:
+        raise ValueError(
+            f"GDELT file has only {num_gdelt_cols} columns — "
+            "expected 57. Wrong file or empty."
+        )
 
     gdelt_filtered = (
         gdelt_raw
@@ -191,49 +213,62 @@ try:
         .filter(F.col("g_year").isNotNull())
         .filter(F.col("g_actor_iso3").isNotNull())
         .filter(F.length(F.col("g_actor_iso3")) == 3)
+        .filter(F.col("g_year").isin([int(y) for y in GDELT_YEARS]))
     )
 
-    gdelt_named = gdelt_filtered.withColumn(
-        "g_country", iso3_to_country(F.col("g_actor_iso3"))
-    ).filter(F.col("g_country").isNotNull())
+    gdelt_named = (
+        gdelt_filtered
+        .withColumn("g_country", iso3_to_country(F.col("g_actor_iso3")))
+        .filter(F.col("g_country").isNotNull())
+    )
 
     gdelt_agg = (
         gdelt_named
         .groupBy("g_year", "g_country")
-        # FIX #4: renamed alias to gdelt_evt_count to avoid UDF parameter clash
         .agg(F.count("*").alias("gdelt_evt_count"))
     )
 
     gdelt_count = gdelt_agg.cache().count()
-    print(f"[GDELT] Aggregated into {gdelt_count:,} (year, country) buckets.")
+    print(f"[GDELT] Aggregated: {gdelt_count:,} (year, country) buckets.")
+
+    if gdelt_count == 0:
+        raise ValueError("GDELT aggregation returned 0 rows.")
 
 except Exception as exc:
-    print(f"[ERROR] GDELT ingest failed: {exc}")
+    print(f"[GDELT] FATAL — {exc}")
+    print("[GDELT] Check that EMR has internet access and can reach s3://gdelt-open-data/")
     spark.stop()
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
-# 4. Distributed JOIN (GTD left-join GDELT aggregation)
+# 4. LEFT JOIN  GTD ← GDELT
 # ---------------------------------------------------------------------------
-print("[*] Performing LEFT JOIN (GTD ← GDELT) ...")
+print("[*] LEFT JOIN GTD ← GDELT ...")
+
 joined_df = (
     gtd_df
     .join(
-        F.broadcast(gdelt_agg),
+        F.broadcast(gdelt_agg),   # gdelt_agg is small (~500 rows) — safe to broadcast
         (gtd_df.year    == gdelt_agg.g_year) &
         (gtd_df.country == gdelt_agg.g_country),
         how="left"
     )
     .drop("g_year", "g_country")
-    # FIX #4: fillna key matches the renamed alias
     .fillna({"gdelt_evt_count": 0})
 )
 
 joined_count = joined_df.cache().count()
-print(f"[JOIN] {joined_count:,} records in joined dataset.")
+matched      = joined_df.filter(F.col("gdelt_evt_count") > 0).count()
+print(f"[JOIN] Total records : {joined_count:,}")
+print(f"[JOIN] GDELT-matched : {matched:,} ({100*matched//max(joined_count,1)}%)")
+
+if joined_count == 0:
+    print("[JOIN] FATAL — joined dataset is empty.")
+    spark.stop()
+    sys.exit(1)
 
 # ---------------------------------------------------------------------------
-# 5. Llama-3 Instruct JSONL Formatting (UDF)
+# 5. Llama-3 Instruct JSONL Formatting
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = (
     "You are Horus, an elite Intelligence Analyst specializing in Open-Source "
@@ -244,93 +279,74 @@ SYSTEM_PROMPT = (
 @F.udf(StringType())
 def build_jsonl_record(year, country, attack_type, target_type, weapon_type,
                        kills, wounds, group_name, gdelt_evt_count):
-    """
-    Constructs a single JSONL record in the Alpaca instruction format.
-    Runs distributed across all Spark executors.
-    """
     if any(v is None for v in [year, country, attack_type]):
         return None
+
+    kills_i  = int(float(kills))           if kills           else 0
+    wounds_i = int(float(wounds))          if wounds          else 0
+    gdelt_i  = int(float(gdelt_evt_count)) if gdelt_evt_count else 0
 
     instruction = (
         f"Provide a brief intelligence summary of the {attack_type} incident "
         f"that occurred in {country} during {year}."
     )
 
-    kills_i  = int(float(kills))         if kills         else 0
-    wounds_i = int(float(wounds))        if wounds        else 0
-    # FIX #4: param name matches the new alias
-    gdelt_i  = int(float(gdelt_evt_count)) if gdelt_evt_count else 0
-
-    if kills_i > 0 or wounds_i > 0:
-        casualty_str = (
-            f"resulting in approximately {kills_i} reported "
-            f"{'fatality' if kills_i == 1 else 'fatalities'} "
-            f"and {wounds_i} wounded"
-        )
-    else:
-        casualty_str = "with no casualties reported"
-
+    casualty_str = (
+        f"resulting in approximately {kills_i} reported "
+        f"{'fatality' if kills_i == 1 else 'fatalities'} and {wounds_i} wounded"
+        if (kills_i > 0 or wounds_i > 0) else
+        "with no casualties reported"
+    )
     target_str = f"The incident primarily targeted {target_type}." if target_type else ""
-    weapon_str = f"The perpetrators utilized {weapon_type}." if weapon_type else ""
+    weapon_str = f"The perpetrators utilized {weapon_type}."       if weapon_type else ""
+    group_str  = (
+        f"Responsibility was attributed to {group_name}."
+        if group_name and group_name.strip() not in ("", "Unknown") else ""
+    )
+    gdelt_str = (
+        f"Concurrent GDELT analysis recorded {gdelt_i:,} geopolitical events "
+        f"linked to {country} in {year}, indicating an elevated operational tempo."
+        if gdelt_i > 0 else
+        f"No corroborating GDELT activity was indexed for {country} in {year}."
+    )
+    severity = "high" if kills_i >= 10 else "moderate" if kills_i >= 3 else "low"
 
-    group_str = ""
-    if group_name and group_name.strip() not in ("", "Unknown"):
-        group_str = f"Responsibility was attributed to {group_name}."
-
-    if gdelt_i > 0:
-        gdelt_str = (
-            f"Concurrent GDELT analysis recorded {gdelt_i:,} geopolitical events "
-            f"linked to {country} in {year}, indicating an elevated operational tempo."
-        )
-    else:
-        gdelt_str = (
-            f"No corroborating GDELT activity was indexed for {country} in {year}."
-        )
-
-    response_parts = [
+    response = "\n".join(p for p in [
         f"INTELLIGENCE REPORT — {attack_type.upper()} | {country} | {year}",
         "",
-        f"According to GTD records, a {attack_type} incident took place in {country} "
-        f"during {year}, {casualty_str}.",
-        target_str,
-        weapon_str,
-        group_str,
+        f"According to GTD records, a {attack_type} incident took place in "
+        f"{country} during {year}, {casualty_str}.",
+        target_str, weapon_str, group_str,
         "",
         f"GEOPOLITICAL CONTEXT: {gdelt_str}",
         "",
-        "THREAT ASSESSMENT: This incident is consistent with patterns of "
-        f"{'high' if kills_i >= 10 else 'moderate' if kills_i >= 3 else 'low'}-severity "
-        f"terrorism activity. Continued monitoring of {country} is recommended.",
-    ]
-    response = "\n".join(part for part in response_parts if part is not None)
+        f"THREAT ASSESSMENT: This incident is consistent with patterns of "
+        f"{severity}-severity terrorism activity. "
+        f"Continued monitoring of {country} is recommended.",
+    ] if p is not None)
 
-    record = {
+    return json.dumps({
         "system":      SYSTEM_PROMPT,
         "instruction": instruction,
         "input":       "",
         "output":      response,
-    }
-    return json.dumps(record, ensure_ascii=False)
+    }, ensure_ascii=False)
 
 
-print("[*] Applying Llama-3 formatting UDF ...")
+print("[*] Applying Llama-3 JSONL formatting UDF ...")
 formatted_df = (
     joined_df
-    .withColumn(
-        "jsonl",
-        build_jsonl_record(
-            F.col("year").cast("string"),
-            F.col("country"),
-            F.col("attack_type"),
-            F.col("target_type"),
-            F.col("weapon_type"),
-            F.col("kills").cast("string"),
-            F.col("wounds").cast("string"),
-            F.col("group_name"),
-            # FIX #4: column name matches renamed alias
-            F.col("gdelt_evt_count").cast("string"),
-        )
-    )
+    .withColumn("jsonl", build_jsonl_record(
+        F.col("year").cast("string"),
+        F.col("country"),
+        F.col("attack_type"),
+        F.col("target_type"),
+        F.col("weapon_type"),
+        F.col("kills").cast("string"),
+        F.col("wounds").cast("string"),
+        F.col("group_name"),
+        F.col("gdelt_evt_count").cast("string"),
+    ))
     .filter(F.col("jsonl").isNotNull())
     .select("jsonl")
 )
@@ -338,44 +354,48 @@ formatted_df = (
 total_formatted = formatted_df.cache().count()
 print(f"[FORMAT] {total_formatted:,} valid JSONL records produced.")
 
+if total_formatted == 0:
+    print("[FORMAT] FATAL — 0 records produced by UDF.")
+    spark.stop()
+    sys.exit(1)
+
 # ---------------------------------------------------------------------------
-# 6. Train / Val / Test Split (80 / 10 / 10)
+# 6. Train / Val / Test Split  80 / 10 / 10
 # ---------------------------------------------------------------------------
-print("[*] Splitting into train / val / test ...")
+print("[*] Splitting 80 / 10 / 10 ...")
 train_df, val_df, test_df = formatted_df.randomSplit([0.80, 0.10, 0.10], seed=42)
 
-splits = {"train": train_df, "val": val_df, "test": test_df}
-for split_name, split_df in splits.items():
+for split_name, split_df in [("train", train_df), ("val", val_df), ("test", test_df)]:
     out_path = f"{OUTPUT_PATH}/{split_name}.jsonl"
-    (
-        split_df
-        .coalesce(1)
-        .write
-        .mode("overwrite")
-        .text(out_path)
-    )
-    # FIX #3: removed post-write count() — avoids recomputing the full DAG.
-    # Split counts are approximate (80/10/10 of total_formatted).
-    print(f"[WRITE] {split_name:5s} → {out_path}")
+    split_df.coalesce(1).write.mode("overwrite").text(out_path)
+    print(f"[WRITE] {split_name:5s} → {out_path}/part-00000")
 
-print(f"  Approximate sizes: train~{int(total_formatted*0.8):,}  "
-      f"val~{int(total_formatted*0.1):,}  test~{int(total_formatted*0.1):,}")
+print(f"\n  Approximate sizes:")
+print(f"    train ~{int(total_formatted * 0.8):,}  |  "
+      f"val ~{int(total_formatted * 0.1):,}  |  "
+      f"test ~{int(total_formatted * 0.1):,}")
 
 # ---------------------------------------------------------------------------
-# 7. Verification — read back 1 record from each split
+# 7. Verify — read back 1 record from each split
 # ---------------------------------------------------------------------------
-print("\n[VERIFY] Sampling first record from each split ...")
+print("\n[VERIFY] Reading back one sample per split ...")
 for split_name in ["train", "val", "test"]:
-    sample_path = f"{OUTPUT_PATH}/{split_name}.jsonl"
     try:
-        sample = spark.read.text(sample_path).limit(1).collect()
+        sample = spark.read.text(f"{OUTPUT_PATH}/{split_name}.jsonl").limit(1).collect()
         if sample:
-            record = json.loads(sample[0]["value"])
-            print(f"\n  [{split_name.upper()} SAMPLE]")
-            print(f"  instruction : {record['instruction']}")
-            print(f"  output(100c): {record['output'][:100]}...")
+            rec = json.loads(sample[0]["value"])
+            print(f"\n  [{split_name.upper()}] {rec['instruction']}")
+            print(f"           {rec['output'][:120]}...")
+        else:
+            print(f"  [WARN] {split_name} is empty!")
     except Exception as exc:
-        print(f"  [WARN] Could not verify {split_name}: {exc}")
+        print(f"  [WARN] {split_name} verify failed: {exc}")
 
-print("\n[DONE] Preprocessing complete. TERMINATE THE EMR CLUSTER NOW.")
+print("\n" + "=" * 65)
+print("[DONE] Pipeline complete!")
+print(f"[DONE] s3://{BUCKET}/processed/train.jsonl/part-00000")
+print(f"[DONE] s3://{BUCKET}/processed/val.jsonl/part-00000")
+print(f"[DONE] s3://{BUCKET}/processed/test.jsonl/part-00000")
+print("[DONE] *** TERMINATE THE EMR CLUSTER NOW ***")
+print("=" * 65)
 spark.stop()
