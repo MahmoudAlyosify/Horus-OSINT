@@ -5,14 +5,20 @@
 #
 #  CONFIRMED CONFIG:
 #    Bucket  : horus-25bbdf-g23-bucket
-#    GTD file: raw/gtd/GTD_Merged_Full.csv
+#    GTD file: raw/gtd/GTD_Merged_Full.csv  (196 MB, plain CSV)
 #    GDELT   : MANDATORY (s3://gdelt-open-data/events/)
+#
+#  FIX v3:
+#    - Added .option("compression", "none") on GTD read → fixes ZipException
+#    - Added .option("compression", "none") on GDELT read → same protection
+#    - Added .option("maxColumns", "200")   → GTD has many columns, avoid parse errors
+#    - Added .option("charToEscapeQuoteEscaping", "\\") → handles GTD quote edge cases
 #
 #  EMR Step — Application location:
 #    s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 #
 #  EMR Step — Arguments field:
-#    (leave EMPTY — all config is hardcoded below)
+#    (leave EMPTY)
 # =============================================================================
 
 import sys
@@ -38,7 +44,7 @@ GDELT_GLOBS  = [f"s3://gdelt-open-data/events/{y}*.csv" for y in GDELT_YEARS]
 print("=" * 65)
 print(f"[CONFIG] Bucket    : {S3_BUCKET}")
 print(f"[CONFIG] GTD source: {GTD_RAW_PATH}")
-print(f"[CONFIG] GDELT     : {len(GDELT_YEARS)} years ({GDELT_YEARS[0]}–{GDELT_YEARS[-1]})")
+print(f"[CONFIG] GDELT     : {len(GDELT_YEARS)} years ({GDELT_YEARS[0]}-{GDELT_YEARS[-1]})")
 print(f"[CONFIG] Output    : {OUTPUT_PATH}")
 print("=" * 65)
 
@@ -48,25 +54,24 @@ print("=" * 65)
 spark = (
     SparkSession.builder
     .appName(f"{NETID}-HorusOSINT-DataPrep")
-    .config("spark.sql.shuffle.partitions", "100")
-    .config("spark.sql.adaptive.enabled", "true")
-    .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+    .config("spark.sql.shuffle.partitions",                     "100")
+    .config("spark.sql.adaptive.enabled",                       "true")
+    .config("spark.sql.adaptive.coalescePartitions.enabled",    "true")
     .config("spark.hadoop.fs.s3.impl",
             "com.amazon.ws.emr.hadoop.fs.EmrFileSystem")
     .config("spark.hadoop.fs.s3a.impl",
             "org.apache.hadoop.fs.s3a.S3AFileSystem")
-    .config("spark.network.timeout",             "800s")
-    .config("spark.executor.heartbeatInterval",  "60s")
-    .config("spark.sql.broadcastTimeout",        "600")
+    .config("spark.network.timeout",            "800s")
+    .config("spark.executor.heartbeatInterval", "60s")
+    .config("spark.sql.broadcastTimeout",       "600")
     .getOrCreate()
 )
 spark.sparkContext.setLogLevel("WARN")
 print("[*] Spark Session started OK.")
 
 # ---------------------------------------------------------------------------
-# 2. Ingest GTD  (GTD_Merged_Full.csv)
+# 2. Ingest GTD  (GTD_Merged_Full.csv — 196 MB plain CSV)
 # ---------------------------------------------------------------------------
-# Official GTD column names — these must match exactly what's in your CSV header.
 GTD_COLUMNS = {
     "iyear":           "year",
     "country_txt":     "country",
@@ -83,11 +88,17 @@ print(f"[GTD] Reading: {GTD_RAW_PATH}")
 try:
     gtd_raw = (
         spark.read
-        .option("header",  "true")
-        .option("inferSchema", "false")
-        .option("escape",  '"')
-        .option("quote",   '"')
-        .option("mode",    "PERMISSIVE")
+        .option("header",                    "true")
+        .option("inferSchema",               "false")
+        # ── FIX v3: tell Spark this is a plain uncompressed CSV ──
+        .option("compression",               "none")
+        # ── handle GTD's messy quoting ──
+        .option("escape",                    '"')
+        .option("quote",                     '"')
+        .option("charToEscapeQuoteEscaping", "\\")
+        .option("mode",                      "PERMISSIVE")
+        # ── GTD has ~135 columns — raise the default limit ──
+        .option("maxColumns",                "200")
         .csv(GTD_RAW_PATH)
     )
 
@@ -106,7 +117,7 @@ try:
     ]
 
     if not select_exprs:
-        print("[GTD] FATAL — none of the expected GTD columns exist in the CSV!")
+        print("[GTD] FATAL — none of the expected GTD columns exist!")
         print(f"[GTD] Expected : {list(GTD_COLUMNS.keys())}")
         print(f"[GTD] Found    : {actual_cols[:20]}")
         spark.stop()
@@ -140,10 +151,9 @@ except Exception as exc:
 # ---------------------------------------------------------------------------
 # 3. Ingest & Aggregate GDELT V1  (MANDATORY)
 # ---------------------------------------------------------------------------
-# GDELT V1 has no header. Column layout:
-#   _c0 = GlobalEventID
-#   _c1 = SQLDATE (YYYYMMDD)  → extract first 4 chars = year
-#   _c7 = Actor1CountryCode   → ISO3 alpha-3 country code
+# GDELT V1 column layout (no header):
+#   _c1 = SQLDATE (YYYYMMDD) → year = first 4 chars
+#   _c7 = Actor1CountryCode  → ISO3
 
 ISO3_TO_NAME = {
     "AFG": "Afghanistan",    "IRQ": "Iraq",           "PAK": "Pakistan",
@@ -190,19 +200,19 @@ print(f"[GDELT] Reading years {GDELT_YEARS} from s3://gdelt-open-data/events/ ..
 try:
     gdelt_raw = (
         spark.read
-        .option("delimiter", "\t")
-        .option("header",    "false")
+        .option("delimiter",   "\t")
+        .option("header",      "false")
+        # ── FIX v3: explicit no-compression on GDELT too ──
+        .option("compression", "none")
+        .option("maxColumns",  "60")
         .csv(GDELT_GLOBS)
     )
 
-    num_gdelt_cols = len(gdelt_raw.columns)
-    print(f"[GDELT] Columns detected: {num_gdelt_cols} (expected 57 for V1)")
+    num_cols = len(gdelt_raw.columns)
+    print(f"[GDELT] Columns detected: {num_cols} (expected 57 for GDELT V1)")
 
-    if num_gdelt_cols < 8:
-        raise ValueError(
-            f"GDELT file has only {num_gdelt_cols} columns — "
-            "expected 57. Wrong file or empty."
-        )
+    if num_cols < 8:
+        raise ValueError(f"GDELT has only {num_cols} columns — expected 57.")
 
     gdelt_filtered = (
         gdelt_raw
@@ -236,7 +246,6 @@ try:
 
 except Exception as exc:
     print(f"[GDELT] FATAL — {exc}")
-    print("[GDELT] Check that EMR has internet access and can reach s3://gdelt-open-data/")
     spark.stop()
     sys.exit(1)
 
@@ -248,7 +257,7 @@ print("[*] LEFT JOIN GTD ← GDELT ...")
 joined_df = (
     gtd_df
     .join(
-        F.broadcast(gdelt_agg),   # gdelt_agg is small (~500 rows) — safe to broadcast
+        F.broadcast(gdelt_agg),
         (gtd_df.year    == gdelt_agg.g_year) &
         (gtd_df.country == gdelt_agg.g_country),
         how="left"
@@ -259,11 +268,11 @@ joined_df = (
 
 joined_count = joined_df.cache().count()
 matched      = joined_df.filter(F.col("gdelt_evt_count") > 0).count()
-print(f"[JOIN] Total records : {joined_count:,}")
-print(f"[JOIN] GDELT-matched : {matched:,} ({100*matched//max(joined_count,1)}%)")
+print(f"[JOIN] Total  : {joined_count:,}")
+print(f"[JOIN] Matched: {matched:,} ({100 * matched // max(joined_count, 1)}%)")
 
 if joined_count == 0:
-    print("[JOIN] FATAL — joined dataset is empty.")
+    print("[JOIN] FATAL — empty join result.")
     spark.stop()
     sys.exit(1)
 
@@ -290,7 +299,6 @@ def build_jsonl_record(year, country, attack_type, target_type, weapon_type,
         f"Provide a brief intelligence summary of the {attack_type} incident "
         f"that occurred in {country} during {year}."
     )
-
     casualty_str = (
         f"resulting in approximately {kills_i} reported "
         f"{'fatality' if kills_i == 1 else 'fatalities'} and {wounds_i} wounded"
@@ -355,7 +363,7 @@ total_formatted = formatted_df.cache().count()
 print(f"[FORMAT] {total_formatted:,} valid JSONL records produced.")
 
 if total_formatted == 0:
-    print("[FORMAT] FATAL — 0 records produced by UDF.")
+    print("[FORMAT] FATAL — 0 records. UDF filtered everything out.")
     spark.stop()
     sys.exit(1)
 
