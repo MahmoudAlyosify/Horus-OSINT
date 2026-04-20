@@ -33,7 +33,7 @@ NETID       = "25bbdf-g23"
 S3_BUCKET    = f"s3://{BUCKET}"
 GTD_RAW_PATH = f"{S3_BUCKET}/{GTD_KEY}"
 OUTPUT_PATH  = f"{S3_BUCKET}/processed"
-GDELT_GLOBS  = [f"s3://gdelt-open-data/events/{y}*.CSV" for y in GDELT_YEARS]
+GDELT_GLOBS  = [f"s3://gdelt-open-data/events/{y}*.csv" for y in GDELT_YEARS]
 
 print("=" * 65)
 print(f"[CONFIG] Bucket    : {S3_BUCKET}")
