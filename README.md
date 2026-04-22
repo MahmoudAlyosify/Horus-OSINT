@@ -21,13 +21,13 @@ The entire pipeline — from raw data ingestion through distributed preprocessin
 │                         DATA INGESTION                              │
 │  S3: horus-25bbdf-g23-bucket/raw/                                   │
 │  ├── gtd/gtd_merged.csv          (GTD — uploaded manually)          │
-│  └── [GDELT]                     (AWS Public Dataset — direct read)  │
+│  └── [GDELT]                     (AWS Public Dataset — direct read) │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    DISTRIBUTED PREPROCESSING                        │
-│  AWS EMR Cluster: 25bbdf-g23-emr  [TERMINATED]                     │
+│  AWS EMR Cluster: 25bbdf-g23-emr  [TERMINATED]                      │
 │  ├── 1× Master  — m5.xlarge                                         │
 │  └── 2× Core    — m5.xlarge                                         │
 │  PySpark Job: pyspark_job.py                                        │
@@ -42,20 +42,20 @@ The entire pipeline — from raw data ingestion through distributed preprocessin
 │               └── test.jsonl                                        │
 └──────────────┬───────────────────────────────────────────────────── ┘
                │
-               │                  ┌────────────────────────────────┐
-               └─────────────────►│   Google Colab — T4 GPU (16GB) │
+               │                  ┌─────────────────────────────────┐
+               └─────────────────►│   Google Colab — T4 GPU (16GB)  │
                                   │   RUN_horus_osint_final_v3.ipynb│
                                   │                                 │
-                                  │  • Unsloth QLoRA (4-bit NF4)   │
-                                  │  • LoRA r=16, α=32             │
-                                  │  • 500 steps, lr=2e-4          │
-                                  │  • Export: q4_k_m GGUF (4.92GB)│
-                                  └──────────────┬─────────────────┘
+                                  │  • Unsloth QLoRA (4-bit NF4)    │
+                                  │  • LoRA r=16, α=32              │
+                                  │  • 500 steps, lr=2e-4           │
+                                  │  • Export: q4_k_m GGUF (4.92GB) │
+                                  └──────────────┬──────────────────┘
                                                  │
                                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │         S3: horus-25bbdf-g23-bucket/models/                         │
-│         └── horus-llama3-osint-Q4_K_M.gguf   (4.92 GB)             │
+│         └── horus-llama3-osint-Q4_K_M.gguf   (4.92 GB)              │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
                             ▼
