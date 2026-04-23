@@ -14,6 +14,16 @@ The entire pipeline — from raw data ingestion through distributed preprocessin
 
 ---
 
+## Pretrained Model on Hugging Face
+
+The latest Horus-OSINT model is available on Hugging Face for direct download and testing:
+
+[Horus-OSINT on Hugging Face](https://huggingface.co/mahmoudalyosify/Horus-OSINT)
+
+You can try the model online, download the GGUF file, or use it in your own applications. See the Hugging Face page for usage examples and more details.
+
+---
+
 ## System Architecture
 
 ```
@@ -86,15 +96,15 @@ The entire pipeline — from raw data ingestion through distributed preprocessin
 
 ## Prerequisites
 
-| Requirement | Version / Notes |
-|---|---|
-| AWS Account | Region: `us-east-1` |
-| Terraform | `>= 1.3` |
-| Python | `3.10+` |
-| Apache Spark | `3.5` (via EMR 7.0.0) |
-| Google Colab | T4 GPU runtime |
-| HuggingFace Token | With gated access to `meta-llama/Meta-Llama-3-8B-Instruct` |
-| AWS CLI | Configured with project IAM credentials |
+| Requirement         | Version / Notes                                  |
+|---------------------|--------------------------------------------------|
+| AWS Account         | Region: `us-east-1`                              |
+| Terraform           | `>= 1.3`                                         |
+| Python              | `3.10+`                                          |
+| Apache Spark        | `3.5` (via EMR 7.0.0)                            |
+| Google Colab        | T4 GPU runtime                                   |
+| HuggingFace Token   | With gated access to `meta-llama/Meta-Llama-3-8B-Instruct` |
+| AWS CLI             | Configured with project IAM credentials          |
 
 ---
 
@@ -119,12 +129,12 @@ terraform apply -auto-approve
 
 **Outputs to record after apply:**
 
-| Output Key | Example Value |
-|---|---|
-| `vpc_id` | `vpc-0abc...` |
-| `subnet_id` | `subnet-0xyz...` |
-| `security_group_id` | `sg-0def...` |
-| `s3_bucket_name` | `horus-25bbdf-g23-bucket` |
+| Output Key         | Example Value       |
+|--------------------|---------------------|
+| `vpc_id`           | `vpc-0abc...`       |
+| `subnet_id`        | `subnet-0xyz...`    |
+| `security_group_id`| `sg-0def...`        |
+| `s3_bucket_name`   | `horus-25bbdf-g23-bucket` |
 
 ---
 
@@ -150,15 +160,15 @@ aws s3 cp pyspark_job.py s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 
 #### 3b. Launch EMR Cluster via AWS Console
 
-| Setting | Value |
-|---|---|
-| Cluster Name | `25bbdf-g23-emr` |
-| EMR Release | `emr-7.0.0` (Spark 3.5) |
-| Master Node | `1 × m5.xlarge` |
-| Core Nodes | `2 × m5.xlarge` |
-| Region | `us-east-1` |
-| VPC / Subnet | `25bbdf-g23-vpc` / `25bbdf-g23-public-subnet` |
-| EC2 Key Pair | Your existing key pair |
+| Setting          | Value                       |
+|------------------|-----------------------------|
+| Cluster Name     | `25bbdf-g23-emr`            |
+| EMR Release      | `emr-7.0.0` (Spark 3.5)     |
+| Master Node      | `1 × m5.xlarge`             |
+| Core Nodes       | `2 × m5.xlarge`             |
+| Region           | `us-east-1`                 |
+| VPC / Subnet     | `25bbdf-g23-vpc` / `25bbdf-g23-public-subnet` |
+| EC2 Key Pair     | Your existing key pair       |
 
 #### 3c. Submit the PySpark step
 
@@ -200,14 +210,14 @@ Open `RUN_horus_osint_final_v3.ipynb` in Google Colab and follow these steps:
 
 **What the notebook executes:**
 
-| Stage | Action |
-|---|---|
-| Model Load | `unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit` in 4-bit NF4 |
-| PEFT Setup | LoRA adapters injected into all 7 attention/FFN projections |
-| Data | 159,826 JSONL samples downloaded from S3, formatted to Llama-3 template |
-| Training | SFTTrainer — 500 steps, ~15–25 min on T4 |
-| Export | GGUF conversion: `q4_k_m` quantization → **4.92 GB** |
-| Upload | GGUF pushed to `s3://horus-25bbdf-g23-bucket/models/` |
+| Stage        | Action                                                     |
+|--------------|------------------------------------------------------------|
+| Model Load   | `unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit` in 4-bit NF4   |
+| PEFT Setup   | LoRA adapters injected into all 7 attention/FFN projections|
+| Data         | 159,826 JSONL samples downloaded from S3, formatted to Llama-3 template |
+| Training     | SFTTrainer — 500 steps, ~15–25 min on T4                   |
+| Export       | GGUF conversion: `q4_k_m` quantization → **4.92 GB**       |
+| Upload       | GGUF pushed to `s3://horus-25bbdf-g23-bucket/models/`      |
 
 **Actual GGUF output path (Colab):**
 ```
@@ -225,15 +235,15 @@ s3://horus-25bbdf-g23-bucket/models/horus-llama3-osint-Q4_K_M.gguf
 
 #### 5a. Launch via AWS Console
 
-| Setting | Value |
-|---|---|
-| Name | `25bbdf-g23-ec2` |
-| AMI | Ubuntu 22.04 LTS — Deep Learning OSS Nvidia Driver |
+| Setting       | Value                                                     |
+|---------------|-----------------------------------------------------------|
+| Name          | `25bbdf-g23-ec2`                                          |
+| AMI           | Ubuntu 22.04 LTS — Deep Learning OSS Nvidia Driver        |
 | Instance Type | `g4dn.xlarge` (1× NVIDIA T4, 16GB VRAM, 4 vCPU, 16GB RAM) |
-| VPC | `25bbdf-g23-vpc` |
-| Subnet | `25bbdf-g23-public-subnet` |
-| Security Group | `25bbdf-g23-sg` |
-| Storage | 100 GB gp3 |
+| VPC           | `25bbdf-g23-vpc`                                          |
+| Subnet        | `25bbdf-g23-public-subnet`                                |
+| Security Group| `25bbdf-g23-sg`                                           |
+| Storage       | 100 GB gp3                                                |
 
 #### 5b. Connect via SSH
 
@@ -333,63 +343,63 @@ terraform destroy -auto-approve
 
 ## AWS Resource Naming Reference
 
-| Resource | Name |
-|---|---|
-| VPC | `25bbdf-g23-vpc` |
-| Internet Gateway | `25bbdf-g23-igw` |
-| Public Subnet | `25bbdf-g23-public-subnet` |
-| Route Table | `25bbdf-g23-rt` |
-| Security Group | `25bbdf-g23-sg` |
-| S3 Bucket | `horus-25bbdf-g23-bucket` |
-| EMR Cluster | `25bbdf-g23-emr` |
-| EC2 Instance | `25bbdf-g23-ec2` |
-| Ollama Model | `horus-osint` |
+| Resource         | Name                      |
+|------------------|---------------------------|
+| VPC              | `25bbdf-g23-vpc`          |
+| Internet Gateway | `25bbdf-g23-igw`          |
+| Public Subnet    | `25bbdf-g23-public-subnet`|
+| Route Table      | `25bbdf-g23-rt`           |
+| Security Group   | `25bbdf-g23-sg`           |
+| S3 Bucket        | `horus-25bbdf-g23-bucket` |
+| EMR Cluster      | `25bbdf-g23-emr`          |
+| EC2 Instance     | `25bbdf-g23-ec2`          |
+| Ollama Model     | `horus-osint`             |
 
 ---
 
 ## Security Group Rules
 
-| Port | Protocol | Source | Justification |
-|---|---|---|---|
-| 22 | TCP | `0.0.0.0/0` | SSH administration access |
-| 8080 | TCP | `0.0.0.0/0` | OpenWebUI public browser access |
-| 11434 | TCP | `10.0.0.0/16` | Ollama API — **VPC-internal only** (no auth layer) |
-| All | All | `0.0.0.0/0` (egress) | Package downloads, S3 access, Docker pulls |
+| Port  | Protocol | Source          | Justification                      |
+|-------|----------|-----------------|------------------------------------|
+| 22    | TCP      | `0.0.0.0/0`     | SSH administration access          |
+| 8080  | TCP      | `0.0.0.0/0`     | OpenWebUI public browser access    |
+| 11434 | TCP      | `10.0.0.0/16`   | Ollama API — **VPC-internal only** |
+| All   | All      | `0.0.0.0/0` (egress)| Package downloads, S3 access, Docker pulls |
 
 ---
 
 ## Hyperparameter Reference
 
-| Hyperparameter | Value | Justification |
-|---|---|---|
-| Num Epochs (effective) | `0.03` | Computed: 500 steps ÷ (159,826 ÷ 8 eff. batch) |
-| Learning Rate | `2e-4` | Standard stable starting point for AdamW PEFT |
-| Batch Size | `2` | Optimised for T4 16GB VRAM ceiling |
-| Gradient Accumulation | `4` | Effective batch = 8; stable gradient estimates |
-| Effective Batch Size | `8` | 2 × 4 gradient accumulation steps |
-| LoRA Rank (r) | `16` | Balances VRAM footprint with domain adaptation capacity |
-| LoRA Alpha (α) | `32` | Standard 2× rank scaling for LoRA weight contribution |
-| LoRA Dropout | `0.05` | Light regularisation to prevent format overfitting |
-| Target Modules | `q/k/v/o/gate/up/down_proj` | Full attention + FFN coverage for domain shift |
-| Optimizer | `adamw_8bit` | Memory-efficient optimizer native to Unsloth |
-| Max Steps | `500` | Sufficient for OSINT instruction-format adaptation |
-| Warmup Steps | `50` | Gradual LR ramp-up (10% of total steps) |
-| LR Scheduler | `cosine` | Smooth decay; avoids destabilising sharp drops in PEFT |
-| Max Sequence Length | `2,048` | Covers all OSINT Q&A pairs with margin |
-| Training Quantization | `NF4 (4-bit)` | QLoRA — reduces VRAM from ~16 GB to ~6 GB |
-| Export Quantization | `q4_k_m` | Best quality/size tradeoff for Ollama on g4dn.xlarge |
+| Hyperparameter       | Value    | Justification                                                      |
+|----------------------|----------|--------------------------------------------------------------------|
+| Num Epochs (effective)| `0.03`  | Computed: 500 steps ÷ (159,826 ÷ 8 eff. batch)                     |
+| Learning Rate        | `2e-4`   | Standard stable starting point for AdamW PEFT                      |
+| Batch Size           | `2`      | Optimised for T4 16GB VRAM ceiling                                 |
+| Gradient Accumulation| `4`      | Effective batch = 8; stable gradient estimates                     |
+| Effective Batch Size | `8`      | 2 × 4 gradient accumulation steps                                  |
+| LoRA Rank (r)        | `16`     | Balances VRAM footprint with domain adaptation capacity            |
+| LoRA Alpha (α)       | `32`     | Standard 2× rank scaling for LoRA weight contribution              |
+| LoRA Dropout         | `0.05`   | Light regularisation to prevent format overfitting                 |
+| Target Modules       | `q/k/v/o/gate/up/down_proj` | Full attention + FFN coverage for domain shift  |
+| Optimizer            | `adamw_8bit`| Memory-efficient optimizer native to Unsloth                    |
+| Max Steps            | `500`    | Sufficient for OSINT instruction-format adaptation                 |
+| Warmup Steps         | `50`     | Gradual LR ramp-up (10% of total steps)                            |
+| LR Scheduler         | `cosine` | Smooth decay; avoids destabilising sharp drops in PEFT             |
+| Max Sequence Length  | `2,048`  | Covers all OSINT Q&A pairs with margin                             |
+| Training Quantization| `NF4 (4-bit)`| QLoRA — reduces VRAM from ~16 GB to ~6 GB                      |
+| Export Quantization  | `q4_k_m` | Best quality/size tradeoff for Ollama on g4dn.xlarge               |
 
 ---
 
 ## AWS Cost Summary
 
-| Service | Configuration | Estimated Cost |
-|---|---|---|
-| AWS EMR | 1× Master + 2× Core (m5.xlarge) · ~4 hours | ~$2.40 |
-| AWS EC2 | 1× g4dn.xlarge · ~72 hours | ~$37.87 |
-| AWS S3 | ~15 GB standard storage + requests | ~$0.35 |
-| AWS VPC | IGW + data transfer | ~$2.00 |
-| **Total** | | **~$42.62** |
+| Service          | Configuration                      | Estimated Cost        |
+|------------------|------------------------------------|-----------------------|
+| AWS EMR          | 1× Master + 2× Core (m5.xlarge) · ~4 hours | ~$2.40        |
+| AWS EC2          | 1× g4dn.xlarge · ~72 hours         | ~$37.87               |
+| AWS S3           | ~15 GB standard storage + requests | ~$0.35                |
+| AWS VPC          | IGW + data transfer                | ~$2.00                |
+| **Total**        |                                    | **~$42.62**           |
 
 > Budget remaining: **~$47.38** from the $100 AWS credit allocation.
 
@@ -397,14 +407,14 @@ terraform destroy -auto-approve
 
 ## Fine-Tuning Results Summary
 
-| Metric | Value |
-|---|---|
-| Training Samples | 159,826 |
-| Training Duration | ~15–25 min (T4 GPU) |
-| GGUF Model Size | 4.92 GB |
-| Export Format | `q4_k_m` (4-bit K-quant medium) |
-| S3 Model URI | `s3://horus-25bbdf-g23-bucket/models/horus-llama3-osint-Q4_K_M.gguf` |
-| Base Model | `unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit` |
+| Metric             | Value                       |
+|--------------------|-----------------------------|
+| Training Samples   | 159,826                     |
+| Training Duration  | ~15–25 min (T4 GPU)         |
+| GGUF Model Size    | 4.92 GB                     |
+| Export Format      | `q4_k_m` (4-bit K-quant medium)|
+| S3 Model URI       | `s3://horus-25bbdf-g23-bucket/models/horus-llama3-osint-Q4_K_M.gguf` |
+| Base Model         | `unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit` |
 | Fine-Tuning Method | QLoRA (PEFT) via Unsloth + HuggingFace TRL SFTTrainer |
 
 ---
