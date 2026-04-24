@@ -79,6 +79,7 @@ You can try the model online, download the GGUF file, or use it in your own appl
                             ▼
               User Browser → http://<ec2-public-ip>:8080
 ```
+<img width="1300" height="1210" alt="last-one-inshallahhh drawio-1" src="https://github.com/user-attachments/assets/71d76b4e-011d-4a63-ad8e-e88b66368f59" />
 
 ---
 
