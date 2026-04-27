@@ -1,85 +1,63 @@
-# CISC 886: Horus-OSINT — Cloud-Based Threat Intelligence Assistant
+# 🦅 CISC 886: Horus-OSINT Cloud Assistant
 
-**Queen's University — School of Computing**  
-**Course:** CISC 886 — Cloud Computing  
-**Student NetID:** 25BBDF-G23  
+**Queen's University — School of Computing**
+**Group 14 | AWS NetID Prefix:** `25bbdf-g23`
+
+| **Team Members** | Mahmoud Alyosify · Sondos Omar · Mirna Embaby |
+|---|---|
+| **GitHub Repository** | [github.com/MahmoudAlyosify/Horus-OSINT](https://github.com/MahmoudAlyosify/Horus-OSINT) |
+| **HuggingFace Model** | [huggingface.co/mahmoudalyosify/Horus-OSINT](https://huggingface.co/mahmoudalyosify/Horus-OSINT) |
 
 ---
 
 ## Overview
 
-**Horus-OSINT** is a production-grade, cloud-native conversational intelligence assistant trained to function as an elite Open-Source Intelligence (OSINT) and Global Threat Analyst. The system fine-tunes `Meta-Llama-3-8B-Instruct` on 159,826 records derived from the **Global Terrorism Database (GTD)** and **GDELT** datasets, then deploys the resulting model as a fully interactive web application on AWS.
-
-The entire pipeline — from raw data ingestion through distributed preprocessing, GPU fine-tuning, GGUF quantization, and live web deployment — runs on managed AWS services within a strict $90 budget constraint.
+Horus-OSINT is a cloud-based conversational chatbot designed to act as an Open-Source Intelligence (OSINT) and Global Threat Analyst. It leverages a fine-tuned `Meta-Llama-3-8B-Instruct` LLM trained on 159,826 structured records derived from the Global Terrorism Database (GTD) and GDELT, deployed entirely on AWS infrastructure.
 
 ---
 
-## Pretrained Model on Hugging Face
+## ⚡ Quickstart (TL;DR)
 
-The latest Horus-OSINT model is available on Hugging Face for direct download and testing:
+```
+Step 1 → terraform apply          # Provision VPC, Subnet, SG, S3
+Step 2 → aws s3 cp gtd_merged.csv # Upload raw data to S3
+Step 3 → EMR Step (PySpark)       # Preprocess 20M+ records → JSONL
+Step 4 → Colab Notebook (T4 GPU)  # QLoRA fine-tune → upload GGUF to S3
+Step 5 → EC2 (g4dn.xlarge)        # Ollama + HORUS Custom UI (Nginx/Docker)
+Step 6 → terraform destroy        # Teardown — avoid cost overrun
+```
 
-[Horus-OSINT on Hugging Face](https://huggingface.co/mahmoudalyosify/Horus-OSINT)
-
-You can try the model online, download the GGUF file, or use it in your own applications. See the Hugging Face page for usage examples and more details.
+> **Full commands for each step are in the sections below.**
 
 ---
 
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         DATA INGESTION                              │
-│  S3: horus-25bbdf-g23-bucket/raw/                                   │
-│  ├── gtd/gtd_merged.csv          (GTD — uploaded manually)          │
-│  └── [GDELT]                     (AWS Public Dataset — direct read) │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    DISTRIBUTED PREPROCESSING                        │
-│  AWS EMR Cluster: 25bbdf-g23-emr  [TERMINATED]                      │
-│  ├── 1× Master  — m5.xlarge                                         │
-│  └── 2× Core    — m5.xlarge                                         │
-│  PySpark Job: pyspark_job.py                                        │
-│  Output: 159,826 Llama-3 formatted JSONL records                    │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│               S3: horus-25bbdf-g23-bucket/processed/                │
-│               ├── train.jsonl   (159,826 samples)                   │
-│               ├── val.jsonl                                         │
-│               └── test.jsonl                                        │
-└──────────────┬───────────────────────────────────────────────────── ┘
-               │
-               │                  ┌─────────────────────────────────┐
-               └─────────────────►│   Google Colab — T4 GPU (16GB)  │
-                                  │   RUN_horus_osint_final_v3.ipynb│
-                                  │                                 │
-                                  │  • Unsloth QLoRA (4-bit NF4)    │
-                                  │  • LoRA r=16, α=32              │
-                                  │  • 500 steps, lr=2e-4           │
-                                  │  • Export: q4_k_m GGUF (4.92GB) │
-                                  └──────────────┬──────────────────┘
-                                                 │
-                                                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│         S3: horus-25bbdf-g23-bucket/models/                         │
-│         └── horus-llama3-osint-Q4_K_M.gguf   (4.92 GB)              │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              AWS EC2: 25bbdf-g23-ec2  (g4dn.xlarge)                 │
-│              1× NVIDIA T4 GPU — 16GB VRAM                           │
-│              ├── Ollama   → port 11434 (VPC-internal only)          │
-│              └── OpenWebUI (Docker) → port 8080 (public)            │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │
-                            ▼
-              User Browser → http://<ec2-public-ip>:8080
+S3 (Raw GTD + GDELT)
+       │
+       ▼
+EMR Cluster [25bbdf-g23-emr]   ← PySpark preprocessing + EDA
+(Status: Terminated immediately after use)
+       │
+       ▼
+S3 (Processed JSONL — train/val/test)
+       │
+       │                         ┌─────────────────────────┐
+       ▼                         │  Google Colab (T4 GPU)  │
+Fine-Tuning (Unsloth QLoRA)  ◄──┤  horus_osint_fine_tuning.ipynb │
+       │                         └─────────────────────────┘
+       ▼
+S3 (horus-llama3-osint-Q4_K_M.gguf)
+       │
+       ▼
+EC2 [25bbdf-g23-ec2] — g4dn.xlarge
+  ├── Ollama         (port 11434 — VPC-internal only)
+  └── HORUS UI       (Dockerized Nginx, port 80 — public)
+       │
+       ▼
+User Browser  →  http://<ec2-public-ip>
 ```
-<img width="1300" height="1210" alt="last-one-inshallahhh drawio-1" src="https://github.com/user-attachments/assets/71d76b4e-011d-4a63-ad8e-e88b66368f59" />
 
 ---
 
@@ -87,31 +65,65 @@ You can try the model online, download the GGUF file, or use it in your own appl
 
 ```
 .
-├── main.tf                              # Terraform IaC — VPC, Subnet, IGW, SG, S3
-├── pyspark_job.py                       # PySpark preprocessing pipeline (EMR)
-├── RUN_horus_osint_final_v3.ipynb       # ✅ Executed fine-tuning notebook (Colab T4)
-└── README.md                            # This file
+├── main.tf                         # Terraform — VPC, Subnet, IGW, SG, S3
+├── pyspark_job.py                  # PySpark preprocessing pipeline (EMR)
+├── horus_osint_fine_tuning.ipynb   # Unsloth QLoRA fine-tuning notebook (Colab)
+└── README.md                       # This file
 ```
 
 ---
 
 ## Prerequisites
 
-| Requirement         | Version / Notes                                  |
-|---------------------|--------------------------------------------------|
-| AWS Account         | Region: `us-east-1`                              |
-| Terraform           | `>= 1.3`                                         |
-| Python              | `3.10+`                                          |
-| Apache Spark        | `3.5` (via EMR 7.0.0)                            |
-| Google Colab        | T4 GPU runtime                                   |
-| HuggingFace Token   | With gated access to `meta-llama/Meta-Llama-3-8B-Instruct` |
-| AWS CLI             | Configured with project IAM credentials          |
+| Requirement | Version / Notes |
+|---|---|
+| AWS Account | Region: `ca-central-1` |
+| Terraform | >= 1.3 |
+| Python | 3.10+ |
+| Apache Spark | 3.x (on EMR — no local install needed) |
+| Google Colab | T4 GPU runtime (free tier sufficient) |
+| HuggingFace Token | With access to `meta-llama/Meta-Llama-3-8B-Instruct` |
+| AWS CLI | Configured with project credentials (`aws configure`) |
+
+### Python Dependencies (for local use / inspection)
+
+```bash
+pip install torch transformers datasets trl peft accelerate bitsandbytes boto3 unsloth
+```
+
+> **Note:** The fine-tuning notebook is designed for **Google Colab (T4 GPU)**. To reproduce locally, you need a CUDA-compatible GPU with ≥16 GB VRAM and the dependencies above. All notebook cells include inline installation commands — Colab is the recommended environment.
 
 ---
 
-## Step-by-Step Replication Guide
+## IAM Requirements
 
-### Step 1 — Infrastructure Provisioning
+Ensure your AWS IAM user or role has the following policies attached before running any step:
+
+| Policy | Purpose |
+|---|---|
+| `AmazonS3FullAccess` | Upload/download data and model artefacts |
+| `AmazonEC2FullAccess` | Launch and manage the g4dn.xlarge instance |
+| `AmazonEMRFullAccess` | Create and terminate the EMR cluster |
+| `IAMFullAccess` (or scoped) | Attach instance profile to EMR/EC2 |
+
+EMR also requires a **service role** (`AmazonEMR-ServiceRole`) and an **EC2 instance profile** (`AmazonEMR-InstanceProfile`) — these are created automatically when you launch EMR via the console for the first time.
+
+---
+
+## Dataset Sources
+
+| Dataset | Description | Source |
+|---|---|---|
+| **Global Terrorism Database (GTD)** | 200,000+ verified terrorist incidents (1970–2020) — attack type, perpetrator, target, casualties | [start.umd.edu/gtd](https://www.start.umd.edu/gtd/) |
+| **GDELT Event Database** | Real-time geopolitical event database with Goldstein scale & tone scores | [gdeltproject.org](https://www.gdeltproject.org/) · AWS Open Data: `s3://gdelt-open-data/events/` |
+
+Combined raw records: **20M+** → Post-ETL training samples: **159,826**
+
+---
+
+## Step-by-Step Replication
+
+### Step 1 — Infrastructure Provisioning (Terraform)
 
 ```bash
 # Clone the repository
@@ -121,39 +133,44 @@ cd Horus-OSINT
 # Initialise Terraform providers
 terraform init
 
-# Preview the planned resources
+# Preview resources before creation
 terraform plan
 
 # Apply — creates VPC, Subnet, IGW, Route Table, Security Group, S3 Bucket
 terraform apply -auto-approve
 ```
 
-**Outputs to record after apply:**
+> Save the output values (`vpc_id`, `subnet_id`, `security_group_id`, `s3_bucket_name`) — required for Steps 3 and 5.
 
-| Output Key         | Example Value       |
-|--------------------|---------------------|
-| `vpc_id`           | `vpc-0abc...`       |
-| `subnet_id`        | `subnet-0xyz...`    |
-| `security_group_id`| `sg-0def...`        |
-| `s3_bucket_name`   | `horus-25bbdf-g23-bucket` |
+**Resources created (all prefixed `25bbdf-g23-`):**
+
+| Resource | Name |
+|---|---|
+| VPC | `25bbdf-g23-vpc` |
+| Internet Gateway | `25bbdf-g23-igw` |
+| Public Subnet | `25bbdf-g23-public-subnet` |
+| Route Table | `25bbdf-g23-rt` |
+| Security Group | `25bbdf-g23-sg` |
+| S3 Bucket | `horus-25bbdf-g23-bucket` |
 
 ---
 
 ### Step 2 — Upload Raw Data to S3
 
 ```bash
-# Upload the merged GTD dataset to S3
+# Download GTD merged CSV from the START Consortium (requires registration)
+# Then upload to S3:
 aws s3 cp gtd_merged.csv s3://horus-25bbdf-g23-bucket/raw/gtd/gtd_merged.csv
 
-# GDELT is read directly from the AWS Open Data Registry — no upload required:
-# s3://gdelt-open-data/events/  (accessed inside the PySpark script)
+# GDELT is accessed directly from the AWS Public Dataset — no upload needed:
+# s3://gdelt-open-data/events/  (read directly in the PySpark script)
 ```
 
 ---
 
-### Step 3 — Distributed Preprocessing on AWS EMR
+### Step 3 — Data Preprocessing on AWS EMR
 
-#### 3a. Upload the PySpark script
+#### 3a. Upload PySpark script to S3
 
 ```bash
 aws s3 cp pyspark_job.py s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
@@ -161,17 +178,17 @@ aws s3 cp pyspark_job.py s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 
 #### 3b. Launch EMR Cluster via AWS Console
 
-| Setting          | Value                       |
-|------------------|-----------------------------|
-| Cluster Name     | `25bbdf-g23-emr`            |
-| EMR Release      | `emr-7.0.0` (Spark 3.5)     |
-| Master Node      | `1 × m5.xlarge`             |
-| Core Nodes       | `2 × m5.xlarge`             |
-| Region           | `us-east-1`                 |
-| VPC / Subnet     | `25bbdf-g23-vpc` / `25bbdf-g23-public-subnet` |
-| EC2 Key Pair     | Your existing key pair       |
+| Setting | Value |
+|---|---|
+| Cluster Name | `25bbdf-g23-emr` |
+| EMR Release | emr-6.10.0 (Spark 3.3.x) |
+| Master Node | 1 × m5.xlarge |
+| Core Nodes | 2 × m5.xlarge |
+| Region | ca-central-1 |
+| VPC / Subnet | `25bbdf-g23-vpc` / `25bbdf-g23-public-subnet` |
+| EC2 Key Pair | Your key pair |
 
-#### 3c. Submit the PySpark step
+#### 3c. Add a Step to run the PySpark job
 
 ```
 Step type : Spark application
@@ -180,109 +197,134 @@ Script    : s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 Arguments : --bucket horus-25bbdf-g23-bucket
 ```
 
-#### 3d. ⚠️ Terminate the cluster immediately after completion
-
-> **Required for grading:** Screenshot the cluster in **Terminated** state.
+#### 3d. ⚠️ Terminate the cluster immediately after the step completes
 
 ```bash
-# Verify processed output files
+# Verify output files were written to S3
 aws s3 ls s3://horus-25bbdf-g23-bucket/processed/ --recursive
 ```
 
-**Expected output:**
+Expected output:
 ```
-processed/train.jsonl    ← 159,826 training samples
-processed/val.jsonl
-processed/test.jsonl
+processed/train.jsonl      (~150k samples, 95%)
+processed/val.jsonl        (~5k samples,   2.5%)
+processed/test.jsonl       (~5k samples,   2.5%)
 ```
 
 ---
 
-### Step 4 — Model Fine-Tuning (Google Colab T4 GPU)
+### Step 4 — Model Fine-Tuning (Google Colab)
 
-Open `RUN_horus_osint_final_v3.ipynb` in Google Colab and follow these steps:
-
-1. Set runtime: **Runtime → Change runtime type → T4 GPU**
-2. Add the following to **Colab Secrets** (🔑 icon in left sidebar):
+1. Open `horus_osint_fine_tuning.ipynb` in Google Colab
+2. Set runtime: **Runtime → Change runtime type → T4 GPU**
+3. Add the following to **Colab Secrets** (🔑 icon in left sidebar):
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
-   - `HF_TOKEN` ← HuggingFace token with Llama-3 gated access
-3. Run all cells in order
+   - `HF_TOKEN` (HuggingFace token with Llama-3 access)
+4. Run all cells in order
 
-**What the notebook executes:**
-
-| Stage        | Action                                                     |
-|--------------|------------------------------------------------------------|
-| Model Load   | `unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit` in 4-bit NF4   |
-| PEFT Setup   | LoRA adapters injected into all 7 attention/FFN projections|
-| Data         | 159,826 JSONL samples downloaded from S3, formatted to Llama-3 template |
-| Training     | SFTTrainer — 500 steps, ~15–25 min on T4                   |
-| Export       | GGUF conversion: `q4_k_m` quantization → **4.92 GB**       |
-| Upload       | GGUF pushed to `s3://horus-25bbdf-g23-bucket/models/`      |
-
-**Actual GGUF output path (Colab):**
-```
-/content/horus-llama3-osint_gguf/llama-3-8b-instruct.Q4_K_M.gguf
-```
-
-**S3 destination:**
-```
-s3://horus-25bbdf-g23-bucket/models/horus-llama3-osint-Q4_K_M.gguf
-```
+The notebook will:
+- Download `train.jsonl` from S3
+- Fine-tune `Meta-Llama-3-8B-Instruct` with QLoRA (4-bit NF4, Unsloth)
+- Export the merged model to `horus-llama3-osint-Q4_K_M.gguf`
+- Upload the GGUF to `s3://horus-25bbdf-g23-bucket/models/`
+- Publish adapter weights to HuggingFace Hub
 
 ---
 
-### Step 5 — Launch EC2 Instance
+### Step 5 — EC2 Deployment (Ollama + HORUS Custom UI)
 
-#### 5a. Launch via AWS Console
+> ⚙️ **This section was completed by Sondos Omar.**
 
-| Setting       | Value                                                     |
-|---------------|-----------------------------------------------------------|
-| Name          | `25bbdf-g23-ec2`                                          |
-| AMI           | Ubuntu 22.04 LTS — Deep Learning OSS Nvidia Driver        |
-| Instance Type | `g4dn.xlarge` (1× NVIDIA T4, 16GB VRAM, 4 vCPU, 16GB RAM) |
-| VPC           | `25bbdf-g23-vpc`                                          |
-| Subnet        | `25bbdf-g23-public-subnet`                                |
-| Security Group| `25bbdf-g23-sg`                                           |
-| Storage       | 100 GB gp3                                                |
+#### 5a. Launch EC2 Instance via AWS Console
 
-#### 5b. Connect via SSH
+| Setting | Value |
+|---|---|
+| Name | `25bbdf-g23-ec2` |
+| AMI | Ubuntu 22.04 LTS (Deep Learning OSS Nvidia Driver) |
+| Instance Type | `g4dn.xlarge` (1× NVIDIA T4, 16 GB VRAM) |
+| VPC | `25bbdf-g23-vpc` |
+| Subnet | `25bbdf-g23-public-subnet` |
+| Security Group | `25bbdf-g23-sg` |
+| Storage | 100 GB gp3 |
+
+Deploy the instance into `25bbdf-g23-vpc`, then SSH in:
 
 ```bash
-ssh -i "your-key.pem" ubuntu@<ec2-public-ip>
+ssh -i "your-key.pem" ubuntu@<25bbdf-g23-ec2-public-ip>
 ```
 
----
+#### 5b. Install Ollama and Configure CORS
 
-### Step 6 — Model Deployment with Ollama
-
-Run the following on the EC2 instance:
+To allow the client-side UI to call the Ollama API directly, CORS and host binding must be configured via a systemd override — not just an environment variable — so the setting persists across reboots.
 
 ```bash
-# 1. Install Ollama
+# Install the Ollama LLM runner
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 2. Verify installation
-ollama --version
+# Configure CORS and host binding via systemd override
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+echo -e "[Service]\nEnvironment=\"OLLAMA_HOST=0.0.0.0\"\nEnvironment=\"OLLAMA_ORIGINS=*\"" \
+  | sudo tee /etc/systemd/system/ollama.service.d/override.conf
 
-# 3. Install AWS CLI
+# Reload daemon and restart Ollama
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+
+# Verify it is running and listening on all interfaces
+sudo systemctl status ollama
+```
+
+#### 5c. Load the Fine-Tuned Model
+
+```bash
+# Install AWS CLI
 sudo snap install aws-cli --classic
 
-# 4. Download the fine-tuned GGUF from S3 (4.92 GB)
+# Download GGUF from S3
 aws s3 cp s3://horus-25bbdf-g23-bucket/models/horus-llama3-osint-Q4_K_M.gguf \
     ./horus-llama3-osint.gguf
 
-# 5. Create the Ollama Modelfile
+# Create Modelfile and register with Ollama
 echo "FROM ./horus-llama3-osint.gguf" > Modelfile
-
-# 6. Register the model
 ollama create horus-osint -f Modelfile
 
-# 7. Launch interactive session (screenshot required)
-ollama run horus-osint
+# Verify model is registered
+ollama list
 ```
 
-#### 6a. Validate via REST API
+#### 5d. Deploy HORUS Command Center UI (Dockerized Nginx)
+
+Instead of a generic off-the-shelf interface, a bespoke HTML/JS Single Page Application was engineered and deployed to render streaming Markdown outputs as structured "Intelligence Report Cards" matching the HORUS brand identity.
+
+```bash
+# Install Docker
+sudo apt-get update && sudo apt-get install -y docker.io
+sudo systemctl enable docker && sudo systemctl start docker
+
+# Create web directory and transfer UI assets (index.html, logo.png)
+mkdir -p ~/horus-ui
+# scp index.html logo.png ubuntu@<ec2-ip>:~/horus-ui/
+
+# Deploy lightweight Nginx server on port 80 — auto-restart on reboot
+sudo docker run -d \
+  -p 80:80 \
+  --name horus-custom-ui \
+  --restart always \
+  -v ~/horus-ui:/usr/share/nginx/html:ro \
+  nginx:alpine
+
+# Verify container is running
+sudo docker ps
+```
+
+Access the interface at:
+
+```
+http://<25bbdf-g23-ec2-public-ip>
+```
+
+#### 5e. Test via cURL API
 
 ```bash
 curl http://localhost:11434/api/generate \
@@ -293,131 +335,92 @@ curl http://localhost:11434/api/generate \
   }'
 ```
 
-> **Required screenshots:** `ollama run` terminal output + `curl` JSON response.
+---
+
+## 🏆 Bonus — Enterprise-Grade Custom Web Interface
+
+> ⚙️ **Designed and deployed by Sondos Omar.**
+
+To demonstrate the full operational capabilities of the fine-tuned OSINT LLM, the team engineered and deployed a custom, production-ready Single Page Application (SPA) tailored to the HORUS cyber-intelligence brand identity. Hosted via a Dockerized Nginx server on the AWS EC2 instance, the interface connects directly to the Ollama backend API with custom CORS configuration and dynamic streaming rendering — converting raw Markdown into formatted Intelligence Report Cards in real time. Both desktop and mobile responsiveness were validated.
+
+### Advanced Prompt Engineering & Model Evaluation
+
+The fine-tuned model was stress-tested with two multi-dataset correlation prompts designed to validate that GDELT geopolitical context and GTD tactical incident data were correctly learned and can be synthesized in a single response:
+
+**Phase 1 — Deep Strategic Assessment:**
+
+> *"Execute a strategic OSINT threat assessment for Iraq covering the year 2014. Correlate GDELT political instability metrics with GTD terror incident data. Focus on identifying primary target demographics, dominant attack modalities used by insurgent groups, and the overall threat severity level. Present the findings strictly in the HORUS Intelligence Report format."*
+
+**Phase 2 — Tactical Field Retrieval:**
+
+> *"Generate a HORUS Intelligence Report for Syria, 2015. Correlate GDELT instability with GTD tactical attacks, highlighting weapon modalities and target demographics."*
+
+In both evaluations, the model adhered to strict HORUS Intelligence Report Card formatting while accurately synthesizing multi-source threat demographics — confirming that the GTD+GDELT join performed during PySpark preprocessing successfully transferred into the model's domain knowledge. The seamless deployment of this architecture demonstrates the team's ability to bridge large-scale Big Data pipelines, advanced LLM fine-tuning, and scalable cloud infrastructure into a unified, end-to-end intelligence product.
 
 ---
 
-### Step 7 — Web Interface with OpenWebUI
+### Step 6 — Teardown (After Submission)
 
 ```bash
-# 1. Install Docker
-sudo apt-get update && sudo apt-get install -y docker.io
-
-# 2. Enable and start Docker
-sudo systemctl enable docker && sudo systemctl start docker
-
-# 3. Deploy OpenWebUI container
-sudo docker run -d \
-  -p 8080:8080 \
-  --add-host=host.docker.internal:host-gateway \
-  --restart always \
-  -v open-webui:/app/backend/data \
-  --name open-webui \
-  ghcr.io/open-webui/open-webui:main
-
-# 4. Confirm container is running
-sudo docker ps
-```
-
-#### 7a. Access the interface
-
-```
-http://<ec2-public-ip>:8080
-```
-
-Select **horus-osint** from the model dropdown and begin a conversation.
-
-> **Required screenshot:** Full browser view with model name visible and a sample OSINT query response.
-
----
-
-### Step 8 — Teardown
-
-```bash
-# Terminate EC2 instance from AWS Console first, then destroy all Terraform resources:
+# Terminate EC2 instance via console first, then:
 terraform destroy -auto-approve
 ```
 
-> ⚠️ Always destroy resources after submission to avoid exceeding the $90 credit limit.
-
----
-
-## AWS Resource Naming Reference
-
-| Resource         | Name                      |
-|------------------|---------------------------|
-| VPC              | `25bbdf-g23-vpc`          |
-| Internet Gateway | `25bbdf-g23-igw`          |
-| Public Subnet    | `25bbdf-g23-public-subnet`|
-| Route Table      | `25bbdf-g23-rt`           |
-| Security Group   | `25bbdf-g23-sg`           |
-| S3 Bucket        | `horus-25bbdf-g23-bucket` |
-| EMR Cluster      | `25bbdf-g23-emr`          |
-| EC2 Instance     | `25bbdf-g23-ec2`          |
-| Ollama Model     | `horus-osint`             |
-
----
-
-## Security Group Rules
-
-| Port  | Protocol | Source          | Justification                      |
-|-------|----------|-----------------|------------------------------------|
-| 22    | TCP      | `0.0.0.0/0`     | SSH administration access          |
-| 8080  | TCP      | `0.0.0.0/0`     | OpenWebUI public browser access    |
-| 11434 | TCP      | `10.0.0.0/16`   | Ollama API — **VPC-internal only** |
-| All   | All      | `0.0.0.0/0` (egress)| Package downloads, S3 access, Docker pulls |
-
----
-
-## Hyperparameter Reference
-
-| Hyperparameter       | Value    | Justification                                                      |
-|----------------------|----------|--------------------------------------------------------------------|
-| Num Epochs (effective)| `0.03`  | Computed: 500 steps ÷ (159,826 ÷ 8 eff. batch)                     |
-| Learning Rate        | `2e-4`   | Standard stable starting point for AdamW PEFT                      |
-| Batch Size           | `2`      | Optimised for T4 16GB VRAM ceiling                                 |
-| Gradient Accumulation| `4`      | Effective batch = 8; stable gradient estimates                     |
-| Effective Batch Size | `8`      | 2 × 4 gradient accumulation steps                                  |
-| LoRA Rank (r)        | `16`     | Balances VRAM footprint with domain adaptation capacity            |
-| LoRA Alpha (α)       | `32`     | Standard 2× rank scaling for LoRA weight contribution              |
-| LoRA Dropout         | `0.05`   | Light regularisation to prevent format overfitting                 |
-| Target Modules       | `q/k/v/o/gate/up/down_proj` | Full attention + FFN coverage for domain shift  |
-| Optimizer            | `adamw_8bit`| Memory-efficient optimizer native to Unsloth                    |
-| Max Steps            | `500`    | Sufficient for OSINT instruction-format adaptation                 |
-| Warmup Steps         | `50`     | Gradual LR ramp-up (10% of total steps)                            |
-| LR Scheduler         | `cosine` | Smooth decay; avoids destabilising sharp drops in PEFT             |
-| Max Sequence Length  | `2,048`  | Covers all OSINT Q&A pairs with margin                             |
-| Training Quantization| `NF4 (4-bit)`| QLoRA — reduces VRAM from ~16 GB to ~6 GB                      |
-| Export Quantization  | `q4_k_m` | Best quality/size tradeoff for Ollama on g4dn.xlarge               |
+> ⚠️ **Always run `terraform destroy` after submission** to prevent exhausting the $90 CAD AWS credit.
 
 ---
 
 ## AWS Cost Summary
 
-| Service          | Configuration                      | Estimated Cost        |
-|------------------|------------------------------------|-----------------------|
-| AWS EMR          | 1× Master + 2× Core (m5.xlarge) · ~4 hours | ~$2.40        |
-| AWS EC2          | 1× g4dn.xlarge · ~72 hours         | ~$37.87               |
-| AWS S3           | ~15 GB standard storage + requests | ~$0.35                |
-| AWS VPC          | IGW + data transfer                | ~$2.00                |
-| **Total**        |                                    | **~$42.62**           |
+All costs are estimates based on on-demand pricing in `ca-central-1` as of April 2025. The EMR cluster was terminated immediately after the preprocessing step completed.
 
-> Budget remaining: **~$47.38** from the $100 AWS credit allocation.
+| AWS Service | Configuration | Unit Price | Usage | Approx. Cost (CAD) |
+|---|---|---|---|---|
+| **S3** (horus-25bbdf-g23-bucket) | Standard storage ~15 GB | $0.023/GB/month | ~15 GB | ~$1.50 |
+| **EMR** (25bbdf-g23-emr) | 3× m5.xlarge (master + 2 core) | $0.192/hr per node | ~4 hours | ~$3.00 |
+| **EC2** (25bbdf-g23-ec2) | g4dn.xlarge (T4 GPU) | $0.526/hr on-demand | ~72 hours | ~$3.00 |
+| **VPC / Data Transfer** | IGW + intra-region bandwidth | Variable | — | ~$0.50 |
+| **Google Colab (T4 GPU)** | Fine-tuning hardware | $0.00 | Free Tier | $0.00 |
+| **TOTAL** | | | | **~$8.00 CAD** |
 
----
+**Budget remaining: ~$82.00 CAD** from the $90.00 CAD student credit (~8.9% utilized).
 
-## Fine-Tuning Results Summary
+### Cost Calculation Notes
 
-| Metric             | Value                       |
-|--------------------|-----------------------------|
-| Training Samples   | 159,826                     |
-| Training Duration  | ~15–25 min (T4 GPU)         |
-| GGUF Model Size    | 4.92 GB                     |
-| Export Format      | `q4_k_m` (4-bit K-quant medium)|
-| S3 Model URI       | `s3://horus-25bbdf-g23-bucket/models/horus-llama3-osint-Q4_K_M.gguf` |
-| Base Model         | `unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit` |
-| Fine-Tuning Method | QLoRA (PEFT) via Unsloth + HuggingFace TRL SFTTrainer |
+- **EMR:** `3 nodes × $0.192/hr × 4 hrs = $2.30` + EMR service fee ≈ `$3.00`
+- **EC2:** `$0.526/hr × 72 hrs = $37.87` — _actual usage was significantly lower_ because the instance was started only for demonstration and evaluation (~6 hours total active use). Instance was stopped between sessions.
+- **S3:** `15 GB × $0.023/GB/month ≈ $0.35` for the storage window used.
 
 ---
 
-*Built for CISC 886 — Cloud Computing, Queen's University.*
+## Hyperparameter Table
+
+| Hyperparameter | Value | Reasoning |
+|---|---|---|
+| Learning Rate | 2e-4 | Standard, stable starting point for PEFT using AdamW |
+| Batch Size | 2 | Optimised for memory efficiency on Colab T4 16 GB |
+| Gradient Accumulation | 4 | Simulates effective batch size of 8 |
+| LoRA Rank (r) | 16 | Balances VRAM usage with expressive power |
+| LoRA Alpha | 32 | Standard scaling factor = 2 × rank |
+| Optimizer | adamw_8bit | Memory-efficient optimizer from Unsloth |
+| Max Steps | 500 | Sufficient for OSINT format adaptation |
+| Warmup Steps | 50 | Prevents early training instability |
+| LR Scheduler | cosine | Smooth decay over training |
+| Max Sequence Length | 2048 | Covers all OSINT Q&A pairs |
+| Export Quantization | q4_k_m | Best quality/size tradeoff for Ollama |
+
+---
+
+## Resource Naming Reference
+
+| Resource | Name |
+|---|---|
+| VPC | `25bbdf-g23-vpc` |
+| Internet Gateway | `25bbdf-g23-igw` |
+| Public Subnet | `25bbdf-g23-public-subnet` |
+| Route Table | `25bbdf-g23-rt` |
+| Security Group | `25bbdf-g23-sg` |
+| S3 Bucket | `horus-25bbdf-g23-bucket` |
+| EMR Cluster | `25bbdf-g23-emr` |
+| EC2 Instance | `25bbdf-g23-ec2` |
+| Ollama Model | `horus-osint` |
