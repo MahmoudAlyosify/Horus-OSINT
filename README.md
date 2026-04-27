@@ -43,10 +43,10 @@ EMR Cluster [25bbdf-horus-emr-cluster]   ← PySpark preprocessing + EDA
        ▼
 S3 (Processed JSONL — train/val/test)
        │
-       │                         ┌─────────────────────────┐
-       ▼                         │  Google Colab (T4 GPU)  │
-Fine-Tuning (Unsloth QLoRA)  ◄──┤  horus_osint_fine_tuning.ipynb │
-       │                         └─────────────────────────┘
+       │                         ┌────────────────────────────────┐
+       ▼                         │  Google Colab (T4 GPU).        │
+Fine-Tuning (Unsloth QLoRA).  ◄──┤  horus_osint_fine_tuning.ipynb │
+       │                         └────────────────────────────────┘
        ▼
 S3 (horus-llama3-osint-Q4_K_M.gguf)
        │
@@ -233,8 +233,6 @@ The notebook will:
 ---
 
 ### Step 5 — EC2 Deployment (Ollama + HORUS Custom UI)
-
-> ⚙️ **This section was completed by Sondos Omar.**
 
 #### 5a. Launch EC2 Instance via AWS Console
 
