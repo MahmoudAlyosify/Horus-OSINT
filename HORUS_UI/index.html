@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HORUS-OSINT</title>
+  <meta name="description"
+    content="HORUS-OSINT: Cloud-based AI threat intelligence platform for open source intelligence analysis." />
+
+  <!-- Tailwind CSS v3 CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'cmd-navy': '#1B3A5C',
+            'intel-gold': '#C8A951',
+            'recon-steel': '#2C5F8A',
+            'signal-haze': '#EEF2F7',
+            'deep-cover': '#1A1A2E',
+            'deep-cover-light': '#22223A',
+          },
+          fontFamily: {
+            'display': ['Inter', 'system-ui', 'sans-serif'],
+            'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
+          },
+          animation: {
+            'pulse-gold': 'pulseGold 2.5s ease-in-out infinite',
+            'scan': 'scanline 8s linear infinite',
+            'blink': 'blink 1s step-end infinite',
+            'fade-in': 'fadeIn 0.4s ease-out',
+            'slide-up': 'slideUp 0.35s ease-out',
+          },
+          keyframes: {
+            pulseGold: {
+              '0%, 100%': { opacity: '0.4' },
+              '50%': { opacity: '1' },
+            },
+            scanline: {
+              '0%': { transform: 'translateY(-100%)' },
+              '100%': { transform: 'translateY(100%)' },
+            },
+            blink: {
+              '0%, 100%': { opacity: '1' },
+              '50%': { opacity: '0' },
+            },
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
+            },
+            slideUp: {
+              '0%': { opacity: '0', transform: 'translateY(12px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+
+  <!-- Marked.js for Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    /* ═══════════════════════════════════════════════
+       BASE & CRT EFFECTS
+    ═══════════════════════════════════════════════ */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #1A1A2E;
+      color: #EEF2F7;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* CRT Scanline Overlay — covers the entire viewport */
+    #crt-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      background: repeating-linear-gradient(to bottom,
+          transparent 0px,
+          transparent 2px,
+          rgba(0, 0, 0, 0.06) 2px,
+          rgba(0, 0, 0, 0.06) 4px);
+    }
+
+    /* Animated scan bar */
+    #crt-overlay::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 120px;
+      background: linear-gradient(to bottom,
+          transparent,
+          rgba(200, 169, 81, 0.025),
+          transparent);
+      animation: scanline 8s linear infinite;
+    }
+
+    /* ═══════════════════════════════════════════════
+       SCROLLBAR
+    ═══════════════════════════════════════════════ */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #1A1A2E;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #2C5F8A;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #C8A951;
+    }
+
+    /* ═══════════════════════════════════════════════
+       CUSTOM COMPONENT STYLES
+    ═══════════════════════════════════════════════ */
+
+    /* Gold glow line on header bottom */
+    .header-glow {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #C8A951, transparent);
+      opacity: 0.5;
+    }
+
+    /* Input focus ring */
+    .input-tactical:focus {
+      outline: none;
+      box-shadow: 0 0 0 1px #C8A951;
+    }
+
+    /* Intel Report Card — AI Response */
+    .intel-card {
+      background: #1B3A5C;
+      border-top: 3px solid #C8A951;
+      position: relative;
+    }
+
+    .intel-card::before {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(200, 169, 81, 0.15);
+    }
+
+    /* Markdown content styling inside cards */
+    .intel-body h1,
+    .intel-body h2,
+    .intel-body h3,
+    .intel-body h4,
+    .intel-body h5,
+    .intel-body h6 {
+      color: #C8A951;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-top: 1.2em;
+      margin-bottom: 0.5em;
+    }
+
+    .intel-body h1 {
+      font-size: 1.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .intel-body h2 {
+      font-size: 1.1rem;
+    }
+
+    .intel-body h3 {
+      font-size: 0.95rem;
+    }
+
+    .intel-body p {
+      color: rgba(238, 242, 247, 0.82);
+      margin-bottom: 0.75em;
+      line-height: 1.75;
+      font-size: 0.875rem;
+    }
+
+    .intel-body ul,
+    .intel-body ol {
+      color: rgba(238, 242, 247, 0.78);
+      margin-bottom: 0.75em;
+      padding-left: 1.5em;
+      font-size: 0.875rem;
+      line-height: 1.75;
+    }
+
+    .intel-body li {
+      margin-bottom: 0.25em;
+    }
+
+    .intel-body li::marker {
+      color: #C8A951;
+    }
+
+    .intel-body strong {
+      color: #EEF2F7;
+      font-weight: 600;
+    }
+
+    .intel-body em {
+      color: #C8A951;
+      font-style: italic;
+    }
+
+    .intel-body code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(26, 26, 46, 0.6);
+      color: #C8A951;
+      padding: 0.15em 0.45em;
+      border-radius: 2px;
+      font-size: 0.82rem;
+    }
+
+    .intel-body pre {
+      background: #1A1A2E;
+      border: 1px solid rgba(44, 95, 138, 0.3);
+      border-left: 3px solid #2C5F8A;
+      padding: 1em 1.2em;
+      overflow-x: auto;
+      margin-bottom: 1em;
+      border-radius: 0;
+    }
+
+    .intel-body pre code {
+      background: transparent;
+      padding: 0;
+      color: #EEF2F7;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+
+    .intel-body blockquote {
+      border-left: 3px solid #C8A951;
+      margin: 0.75em 0;
+      padding: 0.5em 1em;
+      background: rgba(200, 169, 81, 0.06);
+      color: rgba(238, 242, 247, 0.7);
+      font-size: 0.875rem;
+    }
+
+    .intel-body a {
+      color: #C8A951;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .intel-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1em;
+      font-size: 0.82rem;
+    }
+
+    .intel-body th {
+      background: rgba(26, 26, 46, 0.5);
+      color: #C8A951;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-align: left;
+      padding: 0.6em 0.8em;
+      border-bottom: 1px solid rgba(44, 95, 138, 0.3);
+    }
+
+    .intel-body td {
+      padding: 0.5em 0.8em;
+      border-bottom: 1px solid rgba(44, 95, 138, 0.15);
+      color: rgba(238, 242, 247, 0.78);
+    }
+
+    .intel-body hr {
+      border: none;
+      height: 1px;
+      background: rgba(200, 169, 81, 0.2);
+      margin: 1em 0;
+    }
+
+    /* User message bubble */
+    .user-msg {
+      background: rgba(44, 95, 138, 0.2);
+      border: 1px solid rgba(44, 95, 138, 0.35);
+      border-right: 3px solid #2C5F8A;
+    }
+
+    /* Typing indicator dots */
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #C8A951;
+      display: inline-block;
+    }
+
+    .typing-dot:nth-child(1) {
+      animation: pulseGold 1.4s 0s infinite;
+    }
+
+    .typing-dot:nth-child(2) {
+      animation: pulseGold 1.4s 0.2s infinite;
+    }
+
+    .typing-dot:nth-child(3) {
+      animation: pulseGold 1.4s 0.4s infinite;
+    }
+
+    /* Status LED */
+    .status-led {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .status-led.online {
+      background: #34D399;
+      box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+    }
+
+    .status-led.offline {
+      background: #F87171;
+    }
+
+    .status-led.connecting {
+      background: #C8A951;
+      animation: pulseGold 1.5s infinite;
+    }
+
+    /* Sidebar decorative glyphs */
+    .glyph-decoration {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: rgba(44, 95, 138, 0.2);
+      letter-spacing: 0.3em;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      user-select: none;
+    }
+
+    /* Send button hover */
+    .btn-send {
+      transition: all 0.2s ease;
+    }
+
+    .btn-send:hover {
+      background: #C8A951 !important;
+      color: #1A1A2E !important;
+    }
+
+    .btn-send:active {
+      transform: scale(0.96);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .intel-body h1 {
+        font-size: 1rem;
+      }
+
+      .intel-body p,
+      .intel-body ul,
+      .intel-body ol {
+        font-size: 0.82rem;
+      }
+    }
+
+    /* ═══════════════════════════════════════════════
+       CREDITS / AUTHORIZED PERSONNEL DOSSIER
+    ═══════════════════════════════════════════════ */
+    .credits-bar {
+      opacity: 0.55;
+      transition: opacity 0.5s ease, border-color 0.5s ease;
+      border-top: 1px solid rgba(44, 95, 138, 0.15);
+    }
+
+    .credits-bar:hover {
+      opacity: 1;
+      border-top-color: rgba(200, 169, 81, 0.35);
+    }
+
+    .credits-bar .stamp-corner {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-color: rgba(200, 169, 81, 0.25);
+      transition: border-color 0.5s ease;
+    }
+
+    .credits-bar:hover .stamp-corner {
+      border-color: rgba(200, 169, 81, 0.6);
+    }
+
+    .credits-bar .stamp-corner.tl {
+      top: 4px;
+      left: 12px;
+      border-top: 1px solid;
+      border-left: 1px solid;
+    }
+
+    .credits-bar .stamp-corner.tr {
+      top: 4px;
+      right: 12px;
+      border-top: 1px solid;
+      border-right: 1px solid;
+    }
+
+    .credits-bar .stamp-corner.bl {
+      bottom: 4px;
+      left: 12px;
+      border-bottom: 1px solid;
+      border-left: 1px solid;
+    }
+
+    .credits-bar .stamp-corner.br {
+      bottom: 4px;
+      right: 12px;
+      border-bottom: 1px solid;
+      border-right: 1px solid;
+    }
+
+    .operative-name {
+      position: relative;
+    }
+
+    .operative-name::before {
+      content: '▸';
+      margin-right: 5px;
+      color: #2C5F8A;
+      font-size: 8px;
+    }
+
+    .credits-bar:hover .operative-name {
+      color: #C8A951;
+    }
+
+    .credits-divider {
+      width: 1px;
+      height: 24px;
+      background: rgba(44, 95, 138, 0.2);
+    }
+
+    @media (max-width: 768px) {
+      .credits-inner {
+        flex-direction: column !important;
+        gap: 6px !important;
+      }
+
+      .credits-divider {
+        display: none;
+      }
+
+      .operatives-list {
+        flex-direction: column !important;
+        gap: 2px !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-deep-cover text-signal-haze font-display">
+
+  <!-- CRT Scanline Overlay -->
+  <div id="crt-overlay"></div>
+
+  <!-- ═══════════════════════════════════════════════════
+       MAIN LAYOUT — Full viewport flex column
+  ═══════════════════════════════════════════════════ -->
+  <div class="h-screen flex flex-col relative">
+
+    <!-- ═══ HEADER ═══ -->
+    <header class="flex-shrink-0 bg-deep-cover border-b border-cmd-navy/30 relative z-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+
+          <!-- Logo + Title -->
+          <div class="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+            <img src="logo.png" alt="HORUS-OSINT Logo" class="w-10 h-10 sm:w-12 sm:h-12 object-contain"
+              id="header-logo" />
+            <div class="flex flex-col">
+              <h1 class="font-display font-black text-lg sm:text-xl tracking-[0.14em] text-intel-gold leading-tight">
+                HORUS
+              </h1>
+              <span class="font-mono text-[9px] sm:text-[10px] tracking-[0.35em] text-recon-steel uppercase">
+                THE EYE THAT NEVER SLEEPS
+              </span>
+            </div>
+          </div>
+
+          <!-- Center Status -->
+          <div class="hidden md:flex items-center gap-6 text-xs font-mono">
+            <div class="flex items-center gap-2">
+              <span class="text-recon-steel/50 tracking-wider uppercase text-[9px]">System</span>
+              <div class="status-led" id="status-led"></div>
+              <span class="text-recon-steel/70 text-[10px] tracking-wide" id="status-text">OFFLINE</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-recon-steel/50 tracking-wider uppercase text-[9px]">Model</span>
+              <span class="text-signal-haze/60 text-[10px] tracking-wide" id="model-name">—</span>
+            </div>
+          </div>
+
+          <!-- Backend IP Input -->
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <label for="backend-ip"
+              class="font-mono text-[9px] text-recon-steel/50 tracking-[0.15em] uppercase hidden sm:block">
+              ENDPOINT
+            </label>
+            <input type="text" id="backend-ip" placeholder="http://<EC2-IP>:11434"
+              value="http://ec2-3-234-227-97.compute-1.amazonaws.com:11434"
+              class="input-tactical bg-deep-cover-light border border-recon-steel/25 text-signal-haze font-mono text-xs px-3 py-1.5 w-48 sm:w-56 placeholder:text-recon-steel/30 rounded-none" />
+            <button id="btn-connect" onclick="testConnection()"
+              class="font-mono text-[10px] tracking-[0.12em] uppercase px-3 py-1.5 border border-intel-gold/40 text-intel-gold hover:bg-intel-gold hover:text-deep-cover transition-all duration-200 rounded-none">
+              Link
+            </button>
+          </div>
+
+        </div>
+      </div>
+      <div class="header-glow"></div>
+    </header>
+
+    <!-- ═══ SESSION BAR ═══ -->
+    <div class="flex-shrink-0 bg-deep-cover border-b border-cmd-navy/20 px-4 sm:px-6 py-1.5">
+      <div class="max-w-7xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="font-mono text-[9px] text-recon-steel/40 tracking-[0.2em] uppercase">Session</span>
+          <span class="font-mono text-[10px] text-intel-gold/60 tracking-wider" id="session-id">—</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="font-mono text-[9px] text-recon-steel/30 tracking-wider" id="timestamp-display"></span>
+          <button onclick="clearChat()"
+            class="font-mono text-[9px] tracking-[0.12em] uppercase text-recon-steel/40 hover:text-intel-gold transition-colors duration-200"
+            title="Clear session">
+            [NEW SESSION]
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ MAIN CONTENT — Chat Area ═══ -->
+    <main class="flex-1 overflow-hidden flex relative">
+
+      <!-- Left decorative edge -->
+      <div class="hidden lg:flex flex-col items-center justify-center w-8 flex-shrink-0 border-r border-cmd-navy/15">
+        <div class="glyph-decoration">
+          ◆ HORUS-OSINT // CLASSIFIED // ULTRA ◆
+        </div>
+      </div>
+
+      <!-- Chat Container -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+
+        <!-- Messages Area -->
+        <div id="chat-messages" class="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+          <!-- Welcome message -->
+          <div id="welcome-screen" class="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+            <img src="logo.png" alt="HORUS" class="w-24 h-24 sm:w-32 sm:h-32 object-contain opacity-50 mb-6" />
+            <h2
+              class="font-display font-black text-2xl sm:text-3xl tracking-[0.18em] text-intel-gold/60 uppercase mb-2">
+              HORUS-OSINT
+            </h2>
+            <p class="font-mono text-xs text-recon-steel/40 tracking-[0.2em] uppercase mb-8">
+              Open Source Intelligence Platform
+            </p>
+            <div class="max-w-md space-y-3">
+              <p class="text-sm text-signal-haze/40 leading-relaxed">
+                Configure your Ollama backend endpoint above and establish connection to begin intelligence operations.
+              </p>
+              <div class="flex flex-wrap justify-center gap-2 mt-4">
+                <button onclick="insertPrompt('Analyze the latest CVE advisories and summarize critical threats')"
+                  class="font-mono text-[10px] text-recon-steel/50 border border-recon-steel/15 px-3 py-1.5 hover:border-intel-gold/40 hover:text-intel-gold/70 transition-all duration-200">
+                  Threat Analysis
+                </button>
+                <button
+                  onclick="insertPrompt('Generate a threat intelligence report on APT groups targeting financial sector')"
+                  class="font-mono text-[10px] text-recon-steel/50 border border-recon-steel/15 px-3 py-1.5 hover:border-intel-gold/40 hover:text-intel-gold/70 transition-all duration-200">
+                  APT Report
+                </button>
+                <button onclick="insertPrompt('What OSINT tools can be used for domain reconnaissance?')"
+                  class="font-mono text-[10px] text-recon-steel/50 border border-recon-steel/15 px-3 py-1.5 hover:border-intel-gold/40 hover:text-intel-gold/70 transition-all duration-200">
+                  OSINT Toolkit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ INPUT AREA ═══ -->
+        <div class="flex-shrink-0 border-t border-cmd-navy/25 bg-deep-cover px-4 sm:px-6 lg:px-8 py-4">
+          <div class="max-w-4xl mx-auto">
+            <div class="flex gap-3 items-end">
+              <div class="flex-1 relative">
+                <textarea id="user-input" rows="1" placeholder="Enter intelligence query..."
+                  class="input-tactical w-full bg-deep-cover-light border border-recon-steel/20 text-signal-haze font-display text-sm px-4 py-3 pr-12 resize-none placeholder:text-recon-steel/25 rounded-none leading-relaxed"
+                  style="max-height: 160px;" onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
+                <span class="absolute right-3 bottom-3 font-mono text-[9px] text-recon-steel/20">
+                  SHIFT+ENTER for newline
+                </span>
+              </div>
+              <button id="btn-send" onclick="sendMessage()"
+                class="btn-send flex-shrink-0 w-12 h-12 flex items-center justify-center border border-intel-gold/40 text-intel-gold font-mono text-sm tracking-wider uppercase rounded-none"
+                title="Execute Query">
+                <!-- Send icon -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="square">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+              <div class="flex items-center gap-3">
+                <label for="model-select"
+                  class="font-mono text-[9px] text-recon-steel/35 tracking-[0.12em] uppercase">Model</label>
+                <select id="model-select"
+                  class="bg-deep-cover-light border border-recon-steel/15 text-signal-haze/70 font-mono text-[11px] px-2 py-1 rounded-none appearance-none cursor-pointer">
+                  <option value="">Select model...</option>
+                </select>
+              </div>
+              <span class="font-mono text-[9px] text-recon-steel/25 tracking-wider" id="char-count">0 chars</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right decorative edge -->
+      <div class="hidden lg:flex flex-col items-center justify-center w-8 flex-shrink-0 border-l border-cmd-navy/15">
+        <div class="glyph-decoration">
+          ◆ SIGINT // HUMINT // GEOINT // MASINT ◆
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ═══ CREDITS / AUTHORIZED PERSONNEL ═══ -->
+    <div class="credits-bar flex-shrink-0 bg-deep-cover relative px-4 sm:px-6 py-2.5">
+      <!-- Dossier corner marks -->
+      <div class="stamp-corner tl"></div>
+      <div class="stamp-corner tr"></div>
+      <div class="stamp-corner bl"></div>
+      <div class="stamp-corner br"></div>
+
+      <div class="credits-inner max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+
+        <!-- Left: Clearance stamp -->
+        <div class="flex items-center gap-3">
+          <span class="font-mono text-[8px] font-bold tracking-[0.3em] uppercase text-recon-steel/40">GROUP-23</span>
+          <span
+            class="font-mono text-[7px] tracking-[0.15em] uppercase px-1.5 py-0.5 border border-intel-gold/20 text-intel-gold/50">CLEARANCE:
+            TOP SECRET</span>
+        </div>
+
+        <!-- Center: Personnel roster -->
+        <div class="flex items-center gap-3">
+          <span class="font-mono text-[8px] font-bold tracking-[0.25em] uppercase text-recon-steel/50">LEAD
+            ANALYSTS</span>
+          <div class="credits-divider"></div>
+          <div class="operatives-list flex items-center gap-4">
+            <span
+              class="operative-name font-mono text-[9px] tracking-[0.08em] text-intel-gold/70 transition-colors duration-300">Mahmoud
+              Alyosify</span>
+            <span
+              class="operative-name font-mono text-[9px] tracking-[0.08em] text-intel-gold/70 transition-colors duration-300">Sondos
+              Hashem</span>
+            <span
+              class="operative-name font-mono text-[9px] tracking-[0.08em] text-intel-gold/70 transition-colors duration-300">Mirna
+              Embaby</span>
+          </div>
+        </div>
+
+        <!-- Right: Classification -->
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[7px] tracking-[0.2em] uppercase text-recon-steel/30">AUTHORIZED OPERATIVES
+            ONLY</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       JAVASCRIPT — Core Logic
+  ═══════════════════════════════════════════════════ -->
+  <script>
+    // ═══ STATE ═══
+    let isStreaming = false;
+    let currentController = null;
+    let messageCount = 0;
+    const sessionId = generateSessionId();
+
+    // ═══ INIT ═══
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('session-id').textContent = sessionId;
+      updateTimestamp();
+      setInterval(updateTimestamp, 1000);
+      updateStatus('offline');
+      document.getElementById('user-input').focus();
+
+      // Configure marked
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+      });
+    });
+
+    // ═══ UTILITIES ═══
+    function generateSessionId() {
+      const hex = () => Math.floor(Math.random() * 0xFFFF).toString(16).padStart(4, '0').toUpperCase();
+      return `HR-${hex()}-${hex()}`;
+    }
+
+    function updateTimestamp() {
+      const now = new Date();
+      const ts = now.toISOString().replace('T', ' // ').substring(0, 22) + ' UTC';
+      document.getElementById('timestamp-display').textContent = ts;
+    }
+
+    function updateStatus(state) {
+      const led = document.getElementById('status-led');
+      const text = document.getElementById('status-text');
+      led.className = 'status-led';
+
+      switch (state) {
+        case 'online':
+          led.classList.add('online');
+          text.textContent = 'CONNECTED';
+          text.className = 'text-emerald-400/80 text-[10px] tracking-wide';
+          break;
+        case 'connecting':
+          led.classList.add('connecting');
+          text.textContent = 'LINKING...';
+          text.className = 'text-intel-gold/70 text-[10px] tracking-wide';
+          break;
+        case 'offline':
+        default:
+          led.classList.add('offline');
+          text.textContent = 'OFFLINE';
+          text.className = 'text-red-400/70 text-[10px] tracking-wide';
+          break;
+      }
+    }
+
+    function getEndpoint() {
+      return document.getElementById('backend-ip').value.replace(/\/+$/, '');
+    }
+
+    function getModel() {
+      return document.getElementById('model-select').value;
+    }
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+      document.getElementById('char-count').textContent = el.value.length + ' chars';
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function insertPrompt(text) {
+      const input = document.getElementById('user-input');
+      input.value = text;
+      autoResize(input);
+      input.focus();
+    }
+
+    function scrollToBottom() {
+      const container = document.getElementById('chat-messages');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // ═══ CONNECTION TEST ═══
+    async function testConnection() {
+      const endpoint = getEndpoint();
+      updateStatus('connecting');
+
+      try {
+        const res = await fetch(`${endpoint}/api/tags`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(8000),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        updateStatus('online');
+
+        // Populate model dropdown
+        const select = document.getElementById('model-select');
+        select.innerHTML = '';
+
+        if (data.models && data.models.length > 0) {
+          data.models.forEach((m) => {
+            const opt = document.createElement('option');
+            opt.value = m.name;
+            opt.textContent = m.name;
+            select.appendChild(opt);
+          });
+          document.getElementById('model-name').textContent = data.models[0].name;
+        } else {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'No models found';
+          select.appendChild(opt);
+        }
+
+      } catch (err) {
+        updateStatus('offline');
+        appendSystemMessage(`Connection failed: ${err.message}. Verify the endpoint and try again.`);
+      }
+    }
+
+    // ═══ SEND MESSAGE ═══
+    async function sendMessage() {
+      const input = document.getElementById('user-input');
+      const text = input.value.trim();
+      if (!text || isStreaming) return;
+
+      const model = getModel();
+      if (!model) {
+        appendSystemMessage('No model selected. Connect to backend and select a model first.');
+        return;
+      }
+
+      // Remove welcome screen
+      const welcome = document.getElementById('welcome-screen');
+      if (welcome) welcome.remove();
+
+      // Add user message
+      messageCount++;
+      appendUserMessage(text, messageCount);
+
+      // Clear input
+      input.value = '';
+      input.style.height = 'auto';
+      document.getElementById('char-count').textContent = '0 chars';
+
+      // Stream AI response
+      await streamResponse(text, model);
+    }
+
+    // ═══ APPEND USER MESSAGE ═══
+    function appendUserMessage(text, index) {
+      const container = document.getElementById('chat-messages');
+      const id = `msg-user-${index}`;
+
+      const html = `
+        <div class="flex justify-end animate-slide-up" id="${id}">
+          <div class="max-w-2xl">
+            <div class="flex items-center justify-end gap-2 mb-1.5">
+              <span class="font-mono text-[9px] text-recon-steel/35 tracking-wider">${new Date().toLocaleTimeString('en-GB')}</span>
+              <span class="font-mono text-[9px] text-recon-steel/50 tracking-[0.15em] uppercase">Operator</span>
+            </div>
+            <div class="user-msg px-4 py-3 text-sm text-signal-haze/90 leading-relaxed whitespace-pre-wrap">${escapeHtml(text)}</div>
+          </div>
+        </div>
+      `;
+
+      container.insertAdjacentHTML('beforeend', html);
+      scrollToBottom();
+    }
+
+    // ═══ APPEND AI RESPONSE (Intel Card) ═══
+    function createIntelCard(index) {
+      const container = document.getElementById('chat-messages');
+      const id = `msg-ai-${index}`;
+      const reportId = `HR-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(index).padStart(4, '0')}`;
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      const html = `
+        <div class="flex justify-start animate-slide-up" id="${id}">
+          <div class="max-w-3xl w-full">
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="font-mono text-[9px] text-intel-gold/60 tracking-[0.15em] uppercase">HORUS Intelligence</span>
+              <span class="font-mono text-[9px] text-recon-steel/35 tracking-wider">${new Date().toLocaleTimeString('en-GB')}</span>
+            </div>
+            <div class="intel-card p-5 sm:p-6">
+              <!-- Card Header -->
+              <div class="flex items-center justify-between mb-4">
+                <span class="font-mono text-[9px] font-bold tracking-[0.25em] uppercase text-intel-gold">Intelligence Report</span>
+                <span class="font-mono text-[9px] text-recon-steel/40 tracking-wider">${reportId}</span>
+              </div>
+              <div class="flex items-center gap-4 font-mono text-[9px] text-recon-steel/50 tracking-wider mb-4 flex-wrap">
+                <span>DATE: ${dateStr}</span>
+                <span>MODEL: <span class="text-signal-haze/60">${getModel()}</span></span>
+                <span>STATUS: <span class="text-emerald-400/70" id="${id}-status">STREAMING</span></span>
+              </div>
+              <div class="w-full h-px bg-intel-gold/15 mb-4"></div>
+              <!-- Card Body — streamed content goes here -->
+              <div class="intel-body" id="${id}-body">
+                <div class="flex items-center gap-2">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                </div>
+              </div>
+              <!-- Card Footer -->
+              <div class="flex items-center justify-between mt-5 pt-3 border-t border-intel-gold/10">
+                <div class="flex gap-2" id="${id}-tags"></div>
+                <img src="logo.png" alt="" class="w-6 h-6 object-contain opacity-20" />
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.insertAdjacentHTML('beforeend', html);
+      scrollToBottom();
+
+      return id;
+    }
+
+    // ═══ STREAM RESPONSE ═══
+    async function streamResponse(prompt, model) {
+      isStreaming = true;
+      toggleSendButton(false);
+
+      const cardId = createIntelCard(messageCount);
+      const bodyEl = document.getElementById(`${cardId}-body`);
+      const statusEl = document.getElementById(`${cardId}-status`);
+      const tagsEl = document.getElementById(`${cardId}-tags`);
+
+      let fullText = '';
+
+      try {
+        currentController = new AbortController();
+
+        const res = await fetch(`${getEndpoint()}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model,
+            prompt: prompt,
+            stream: true,
+          }),
+          signal: currentController.signal,
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(Boolean);
+
+          for (const line of lines) {
+            try {
+              const json = JSON.parse(line);
+              if (json.response) {
+                fullText += json.response;
+                bodyEl.innerHTML = marked.parse(fullText);
+                scrollToBottom();
+              }
+              if (json.done) {
+                // Add performance stats
+                if (json.total_duration) {
+                  const secs = (json.total_duration / 1e9).toFixed(1);
+                  const tps = json.eval_count && json.eval_duration
+                    ? (json.eval_count / (json.eval_duration / 1e9)).toFixed(1)
+                    : '—';
+                  tagsEl.innerHTML = `
+                    <span class="font-mono text-[8px] tracking-[0.1em] uppercase px-2 py-0.5 bg-intel-gold text-deep-cover font-bold">COMPLETE</span>
+                    <span class="font-mono text-[8px] tracking-wider text-recon-steel/40">${secs}s · ${tps} tok/s</span>
+                  `;
+                }
+              }
+            } catch (_) { /* skip malformed lines */ }
+          }
+        }
+
+        statusEl.textContent = 'COMPLETE';
+        statusEl.className = 'text-intel-gold/80';
+
+        if (!tagsEl.innerHTML.trim()) {
+          tagsEl.innerHTML = `<span class="font-mono text-[8px] tracking-[0.1em] uppercase px-2 py-0.5 bg-intel-gold text-deep-cover font-bold">COMPLETE</span>`;
+        }
+
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          statusEl.textContent = 'ABORTED';
+          statusEl.className = 'text-red-400/70';
+          bodyEl.innerHTML = marked.parse(fullText || '*— Stream aborted by operator —*');
+        } else {
+          statusEl.textContent = 'ERROR';
+          statusEl.className = 'text-red-400/70';
+          bodyEl.innerHTML = `<p class="text-red-400/80 font-mono text-xs">Error: ${escapeHtml(err.message)}</p>`;
+        }
+      } finally {
+        isStreaming = false;
+        currentController = null;
+        toggleSendButton(true);
+      }
+    }
+
+    // ═══ SYSTEM MESSAGES ═══
+    function appendSystemMessage(text) {
+      const container = document.getElementById('chat-messages');
+      const welcome = document.getElementById('welcome-screen');
+      if (welcome) welcome.remove();
+
+      const html = `
+        <div class="flex justify-center animate-fade-in">
+          <div class="font-mono text-[10px] text-recon-steel/50 tracking-wider border border-recon-steel/15 px-4 py-2 bg-deep-cover-light max-w-lg text-center">
+            ▲ ${escapeHtml(text)}
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+      scrollToBottom();
+    }
+
+    // ═══ CLEAR CHAT ═══
+    function clearChat() {
+      if (isStreaming && currentController) {
+        currentController.abort();
+      }
+
+      const container = document.getElementById('chat-messages');
+      container.innerHTML = '';
+      messageCount = 0;
+
+      // Re-add welcome
+      container.innerHTML = `
+        <div id="welcome-screen" class="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+          <img src="logo.png" alt="HORUS" class="w-24 h-24 sm:w-32 sm:h-32 object-contain opacity-50 mb-6" />
+          <h2 class="font-display font-black text-2xl sm:text-3xl tracking-[0.18em] text-intel-gold/60 uppercase mb-2">HORUS-OSINT</h2>
+          <p class="font-mono text-xs text-recon-steel/40 tracking-[0.2em] uppercase mb-8">Open Source Intelligence Platform</p>
+          <div class="max-w-md space-y-3">
+            <p class="text-sm text-signal-haze/40 leading-relaxed">
+              Configure your Ollama backend endpoint above and establish connection to begin intelligence operations.
+            </p>
+          </div>
+        </div>
+      `;
+
+      // New session
+      const newId = generateSessionId();
+      document.getElementById('session-id').textContent = newId;
+    }
+
+    // ═══ UI HELPERS ═══
+    function toggleSendButton(enabled) {
+      const btn = document.getElementById('btn-send');
+      if (enabled) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-30');
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+      } else {
+        btn.disabled = true;
+        btn.classList.add('opacity-30');
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin"><circle cx="12" cy="12" r="9"/><path d="M12 3v3"/></svg>`;
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+
+</body>
+
+</html>
