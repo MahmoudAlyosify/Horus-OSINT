@@ -1,7 +1,7 @@
 # 🦅 CISC 886: Horus-OSINT Cloud Assistant
 
 **Queen's University — School of Computing**
-**Group 14 | AWS NetID Prefix:** `25bbdf-g23`
+**Group 23 | AWS NetID Prefix:** `25bbdf-g23`
 
 | **Team Members** | Mahmoud Alyosify · Sondos Omar · Mirna Embaby |
 |---|---|
@@ -23,7 +23,7 @@ Step 1 → terraform apply          # Provision VPC, Subnet, SG, S3
 Step 2 → aws s3 cp gtd_merged.csv # Upload raw data to S3
 Step 3 → EMR Step (PySpark)       # Preprocess 20M+ records → JSONL
 Step 4 → Colab Notebook (T4 GPU)  # QLoRA fine-tune → upload GGUF to S3
-Step 5 → EC2 (g4dn.xlarge)        # Ollama + HORUS Custom UI (Nginx/Docker)
+Step 5 → EC2 (t3.xlarge)          # Ollama + HORUS Custom UI (Nginx/Docker)
 Step 6 → terraform destroy        # Teardown — avoid cost overrun
 ```
 
@@ -37,7 +37,7 @@ Step 6 → terraform destroy        # Teardown — avoid cost overrun
 S3 (Raw GTD + GDELT)
        │
        ▼
-EMR Cluster [25bbdf-g23-emr]   ← PySpark preprocessing + EDA
+EMR Cluster [25bbdf-horus-emr-cluster]   ← PySpark preprocessing + EDA
 (Status: Terminated immediately after use)
        │
        ▼
@@ -51,7 +51,7 @@ Fine-Tuning (Unsloth QLoRA)  ◄──┤  horus_osint_fine_tuning.ipynb │
 S3 (horus-llama3-osint-Q4_K_M.gguf)
        │
        ▼
-EC2 [25bbdf-g23-ec2] — g4dn.xlarge
+EC2 [25bbdf-g23-ec2] — t3.xlarge
   ├── Ollama         (port 11434 — VPC-internal only)
   └── HORUS UI       (Dockerized Nginx, port 80 — public)
        │
@@ -77,7 +77,7 @@ User Browser  →  http://<ec2-public-ip>
 
 | Requirement | Version / Notes |
 |---|---|
-| AWS Account | Region: `ca-central-1` |
+| AWS Account | Region: `us-east-1` (N. Virginia) |
 | Terraform | >= 1.3 |
 | Python | 3.10+ |
 | Apache Spark | 3.x (on EMR — no local install needed) |
@@ -102,7 +102,7 @@ Ensure your AWS IAM user or role has the following policies attached before runn
 | Policy | Purpose |
 |---|---|
 | `AmazonS3FullAccess` | Upload/download data and model artefacts |
-| `AmazonEC2FullAccess` | Launch and manage the g4dn.xlarge instance |
+| `AmazonEC2FullAccess` | Launch and manage the t3.xlarge instance |
 | `AmazonEMRFullAccess` | Create and terminate the EMR cluster |
 | `IAMFullAccess` (or scoped) | Attach instance profile to EMR/EC2 |
 
@@ -180,13 +180,13 @@ aws s3 cp pyspark_job.py s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 
 | Setting | Value |
 |---|---|
-| Cluster Name | `25bbdf-g23-emr` |
-| EMR Release | emr-6.10.0 (Spark 3.3.x) |
+| Cluster Name | `25bbdf-horus-emr-cluster` |
+| EMR Release | emr-7.13.0 |
+| Region | us-east-1 |
 | Master Node | 1 × m5.xlarge |
-| Core Nodes | 2 × m5.xlarge |
-| Region | ca-central-1 |
+| Core Nodes | 1 × m5.xlarge (Maximum: 1 core instance) |
 | VPC / Subnet | `25bbdf-g23-vpc` / `25bbdf-g23-public-subnet` |
-| EC2 Key Pair | Your key pair |
+| EC2 Key Pair | `Horus-key-pair` |
 
 #### 3c. Add a Step to run the PySpark job
 
@@ -242,16 +242,17 @@ The notebook will:
 |---|---|
 | Name | `25bbdf-g23-ec2` |
 | AMI | Ubuntu 22.04 LTS (Deep Learning OSS Nvidia Driver) |
-| Instance Type | `g4dn.xlarge` (1× NVIDIA T4, 16 GB VRAM) |
+| Instance Type | `t3.xlarge` |
 | VPC | `25bbdf-g23-vpc` |
 | Subnet | `25bbdf-g23-public-subnet` |
 | Security Group | `25bbdf-g23-sg` |
-| Storage | 100 GB gp3 |
+| Storage | 30 GB gp3 |
+| EC2 Key Pair | `Horus-key-pair` |
 
 Deploy the instance into `25bbdf-g23-vpc`, then SSH in:
 
 ```bash
-ssh -i "your-key.pem" ubuntu@<25bbdf-g23-ec2-public-ip>
+ssh -i "Horus-key-pair.pem" ubuntu@<25bbdf-g23-ec2-public-ip>
 ```
 
 #### 5b. Install Ollama and Configure CORS
@@ -337,13 +338,26 @@ curl http://localhost:11434/api/generate \
 
 ---
 
+### Step 6 — Teardown (After Submission)
+
+```bash
+# Terminate EC2 instance via console first, then:
+terraform destroy -auto-approve
+```
+
+> ⚠️ **Always run `terraform destroy` after submission** to prevent exhausting the AWS credit.
+
+---
+
 ## 🏆 Bonus — Enterprise-Grade Custom Web Interface
 
 > ⚙️ **Designed and deployed by Sondos Omar.**
 
 To demonstrate the full operational capabilities of the fine-tuned OSINT LLM, the team engineered and deployed a custom, production-ready Single Page Application (SPA) tailored to the HORUS cyber-intelligence brand identity. Hosted via a Dockerized Nginx server on the AWS EC2 instance, the interface connects directly to the Ollama backend API with custom CORS configuration and dynamic streaming rendering — converting raw Markdown into formatted Intelligence Report Cards in real time. Both desktop and mobile responsiveness were validated.
 
-### Advanced Prompt Engineering & Model Evaluation
+---
+
+## 📊 Advanced Prompt Engineering & Model Evaluation
 
 The fine-tuned model was stress-tested with two multi-dataset correlation prompts designed to validate that GDELT geopolitical context and GTD tactical incident data were correctly learned and can be synthesized in a single response:
 
@@ -359,37 +373,22 @@ In both evaluations, the model adhered to strict HORUS Intelligence Report Card 
 
 ---
 
-### Step 6 — Teardown (After Submission)
+## 8. Cloud Infrastructure Cost & FinOps Analysis
 
-```bash
-# Terminate EC2 instance via console first, then:
-terraform destroy -auto-approve
-```
+**Disclaimer on Cost Estimation:** Due to the strict IAM policy restrictions enforced on our federated university AWS account, direct access to the AWS Billing and Cost Management console is restricted. Consequently, the cost metrics presented below are rigorous manual estimates. These calculations are derived from the official AWS on-demand pricing for the **us-east-1 (N. Virginia)** region mapped against our exact resource provisioning timelines.
 
-> ⚠️ **Always run `terraform destroy` after submission** to prevent exhausting the $90 CAD AWS credit.
+To ensure strict compliance with the **$100.00 USD hard budget cap**, the team employed aggressive FinOps governance. This included terminating the EMR cluster immediately post-preprocessing and offloading the VRAM-intensive LoRA fine-tuning process entirely to a free-tier Google Colab (T4 GPU) environment.
 
----
+**Estimated AWS Cost Breakdown (USD):**
 
-## AWS Cost Summary
-
-All costs are estimates based on on-demand pricing in `ca-central-1` as of April 2025. The EMR cluster was terminated immediately after the preprocessing step completed.
-
-| AWS Service | Configuration | Unit Price | Usage | Approx. Cost (CAD) |
+| AWS Service | Resource Configuration | Unit Price (us-east-1) | Active Usage | Approx. Cost (USD) |
 |---|---|---|---|---|
-| **S3** (horus-25bbdf-g23-bucket) | Standard storage ~15 GB | $0.023/GB/month | ~15 GB | ~$1.50 |
-| **EMR** (25bbdf-g23-emr) | 3× m5.xlarge (master + 2 core) | $0.192/hr per node | ~4 hours | ~$3.00 |
-| **EC2** (25bbdf-g23-ec2) | g4dn.xlarge (T4 GPU) | $0.526/hr on-demand | ~72 hours | ~$3.00 |
-| **VPC / Data Transfer** | IGW + intra-region bandwidth | Variable | — | ~$0.50 |
-| **Google Colab (T4 GPU)** | Fine-tuning hardware | $0.00 | Free Tier | $0.00 |
-| **TOTAL** | | | | **~$8.00 CAD** |
-
-**Budget remaining: ~$82.00 CAD** from the $90.00 CAD student credit (~8.9% utilized).
-
-### Cost Calculation Notes
-
-- **EMR:** `3 nodes × $0.192/hr × 4 hrs = $2.30` + EMR service fee ≈ `$3.00`
-- **EC2:** `$0.526/hr × 72 hrs = $37.87` — _actual usage was significantly lower_ because the instance was started only for demonstration and evaluation (~6 hours total active use). Instance was stopped between sessions.
-- **S3:** `15 GB × $0.023/GB/month ≈ $0.35` for the storage window used.
+| **Amazon S3** | Standard Storage (~15 GB) | $0.023 / GB / month | ~15 GB | ~$1.50 |
+| **Amazon EMR** | 3× m5.xlarge (Master + Core) | $0.192 / hour per node | ~5 hours | ~$3.00 |
+| **Amazon EC2** | 1× t3.xlarge (30 GB gp3) | $0.1664 / hour | ~6 hours | ~$1.00 |
+| **VPC / Network** | Data Transfer & IGW | Variable | — | ~$0.35 |
+| **Google Colab** | T4 GPU (Fine-tuning) | $0.00 | Free Tier | $0.00 |
+| **TOTAL** | | | | **~$5.85 USD** |
 
 ---
 
@@ -397,17 +396,21 @@ All costs are estimates based on on-demand pricing in `ca-central-1` as of April
 
 | Hyperparameter | Value | Reasoning |
 |---|---|---|
+| Num Epochs (effective) | 0.03 | Computed as MAX\_STEPS / (dataset\_size / effective\_batch\_size); reported per rubric |
 | Learning Rate | 2e-4 | Standard, stable starting point for PEFT using AdamW |
-| Batch Size | 2 | Optimised for memory efficiency on Colab T4 16 GB |
-| Gradient Accumulation | 4 | Simulates effective batch size of 8 |
-| LoRA Rank (r) | 16 | Balances VRAM usage with expressive power |
-| LoRA Alpha | 32 | Standard scaling factor = 2 × rank |
-| Optimizer | adamw_8bit | Memory-efficient optimizer from Unsloth |
-| Max Steps | 500 | Sufficient for OSINT format adaptation |
-| Warmup Steps | 50 | Prevents early training instability |
-| LR Scheduler | cosine | Smooth decay over training |
-| Max Sequence Length | 2048 | Covers all OSINT Q&A pairs |
-| Export Quantization | q4_k_m | Best quality/size tradeoff for Ollama |
+| Batch Size | 2 | Optimised for memory efficiency on Colab T4 16 GB VRAM |
+| Gradient Accumulation | 4 | Simulates effective batch size of 8 for stable gradient updates |
+| Effective Batch Size | 8 | 2 × 4 = 8; provides stable gradient estimates |
+| LoRA Rank (r) | 16 | Balances VRAM usage with expressive power needed for domain adaptation |
+| LoRA Alpha | 32 | Standard scaling factor = 2 × rank applied to LoRA weights |
+| LoRA Dropout | 0.05 | Light regularisation to prevent overfitting on OSINT format |
+| Optimizer | adamw\_8bit | Highly memory-efficient optimizer provided natively by Unsloth |
+| Max Steps | 500 | Sufficient for the model to adapt to the OSINT instruction format |
+| Warmup Steps | 50 | Gradual LR ramp-up (10% of training) to prevent early instability |
+| LR Scheduler | cosine | Smooth decay avoids sharp LR drops that destabilise PEFT training |
+| Max Sequence Length | 2048 | Covers longest OSINT Q&A pairs with comfortable margin |
+| Quantization (training) | NF4 (4-bit) | QLoRA base quantization — reduces VRAM from ~16 GB to ~6 GB |
+| Quantization (export) | q4\_k\_m | Best quality/size tradeoff for Ollama deployment on EC2 |
 
 ---
 
@@ -421,6 +424,6 @@ All costs are estimates based on on-demand pricing in `ca-central-1` as of April
 | Route Table | `25bbdf-g23-rt` |
 | Security Group | `25bbdf-g23-sg` |
 | S3 Bucket | `horus-25bbdf-g23-bucket` |
-| EMR Cluster | `25bbdf-g23-emr` |
+| EMR Cluster | `25bbdf-horus-emr-cluster` |
 | EC2 Instance | `25bbdf-g23-ec2` |
 | Ollama Model | `horus-osint` |
