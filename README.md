@@ -115,7 +115,7 @@ EMR also requires a **service role** (`AmazonEMR-ServiceRole`) and an **EC2 inst
 
 | Dataset | Description | Source |
 |---|---|---|
-| **Global Terrorism Database (GTD)** | 200,000+ verified terrorist incidents (1970–2020) — attack type, perpetrator, target, casualties | [start.umd.edu/gtd](https://www.start.umd.edu/gtd/) |
+| **Global Terrorism Database (GTD)** | 200,000+ verified terrorist incidents (1970–2020) — attack type, perpetrator, target, casualties | [start.umd.edu/gtd](https://www.start.umd.edu/data-tools/GTD/)|
 | **GDELT Event Database** | Real-time geopolitical event database with Goldstein scale & tone scores | [gdeltproject.org](https://www.gdeltproject.org/) · AWS Open Data: `s3://gdelt-open-data/events/` |
 
 Combined raw records: **20M+** → Post-ETL training samples: **159,826**
