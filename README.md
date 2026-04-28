@@ -58,7 +58,7 @@ EC2 [25bbdf-g23-ec2] — t3.xlarge
        ▼
 User Browser  →  http://<ec2-public-ip>
 ```
-<img width="1990" height="1774" alt="horus drawio (1)" src="https://github.com/user-attachments/assets/2ed6a5fb-45fc-4ca3-99c2-3d46c6e6737b" />
+<img width="2141" height="1702" alt="v3 drawio" src="https://github.com/user-attachments/assets/dd049e42-720d-49e6-bc71-49fea774e472" />
 
 ---
 
