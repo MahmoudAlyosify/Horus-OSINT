@@ -383,7 +383,7 @@ To ensure strict compliance with the **$100.00 USD hard budget cap**, the team e
 | AWS Service | Resource Configuration | Unit Price (us-east-1) | Active Usage | Approx. Cost (USD) |
 |---|---|---|---|---|
 | **Amazon S3** | Standard Storage (~15 GB) | $0.023 / GB / month | ~15 GB | ~$1.50 |
-| **Amazon EMR** | 1× m5.xlarge (Master + Core) | $0.192 / hour per node | ~5 hours | ~$2.00 |
+| **Amazon EMR** | 2× m5.xlarge (Master + Core) | $0.192 / hour per node | ~5 hours | ~$2.00 |
 | **Amazon EC2** | 1× t3.xlarge (30 GB gp3) | $0.1664 / hour | ~6 hours | ~$1.00 |
 | **VPC / Network** | Data Transfer & IGW | Variable | — | ~$0.35 |
 | **Google Colab** | T4 GPU (Fine-tuning) | $0.00 | Free Tier | $0.00 |
