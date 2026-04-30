@@ -1,4 +1,4 @@
-# 🦅 CISC 886: Horus-OSINT Cloud Assistant
+<img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/5d6a2cea-3245-4ff3-b94d-bace29daa690" /># 🦅 CISC 886: Horus-OSINT Cloud Assistant
 
 **Queen's University — School of Computing**
 **Group 23 | AWS NetID Prefix:** `25bbdf-g23`
@@ -17,8 +17,7 @@ Horus-OSINT is a cloud-based conversational chatbot designed to act as an Open-S
 ---
 
 ### Video Demo
-<video src="https://github.com/MahmoudAlyosify/Horus-OSINT/raw/main/Video%20Demo/Horus_OSINT_Video.mp4" controls="controls" style="max-width: 100%;">
-  Your browser does not support the video tag.
+<video src="https://raw.githubusercontent.com/MahmoudAlyosify/Horus-OSINT/main/Video%20Demo/Horus_OSINT_Video.mp4" controls="controls" style="max-width: 100%;">
 </video>
 
 ---
