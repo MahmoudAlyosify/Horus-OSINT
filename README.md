@@ -16,6 +16,13 @@ Horus-OSINT is a cloud-based conversational chatbot designed to act as an Open-S
 
 ---
 
+### Video Demo
+<video src="https://github.com/MahmoudAlyosify/Horus-OSINT/raw/main/Video%20Demo/Horus_OSINT_Video.mp4" controls="controls" style="max-width: 100%;">
+  Your browser does not support the video tag.
+</video>
+
+---
+
 ## ⚡ Quickstart (TL;DR)
 
 ```
