@@ -1,4 +1,4 @@
-<img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/5d6a2cea-3245-4ff3-b94d-bace29daa690" /># 🦅 CISC 886: Horus-OSINT Cloud Assistant
+# 🦅 CISC 886: Horus-OSINT Cloud Assistant
 
 **Queen's University — School of Computing**
 **Group 23 | AWS NetID Prefix:** `25bbdf-g23`
