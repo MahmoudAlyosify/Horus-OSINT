@@ -15,10 +15,11 @@
 Horus-OSINT is a cloud-based conversational chatbot designed to act as an Open-Source Intelligence (OSINT) and Global Threat Analyst. It leverages a fine-tuned `Meta-Llama-3-8B-Instruct` LLM trained on 159,826 structured records derived from the Global Terrorism Database (GTD) and GDELT, deployed entirely on AWS infrastructure.
 
 ---
-
 ### Video Demo
-<video src="https://raw.githubusercontent.com/MahmoudAlyosify/Horus-OSINT/main/Video%20Demo/Horus_OSINT_Video.mp4" controls="controls" style="max-width: 100%;">
-</video>
+
+
+https://github.com/user-attachments/assets/bea69010-ebb0-4769-8837-5be100bca8b2
+
 
 ---
 
