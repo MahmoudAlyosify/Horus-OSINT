@@ -1,10 +1,10 @@
-<table>
+<table align="center">
   <tr>
     <td valign="center">
-      <img src="https://github.com/user-attachments/assets/07ed572b-1dee-4cf2-b30c-2f35ca931d61" width="55"/>
+      <img src="https://github.com/user-attachments/assets/07ed572b-1dee-4cf2-b30c-2f35ca931d61" width="60"/>
     </td>
     <td valign="center">
-      <h2>Horus-OSINT Cloud Assistant</h2>
+      <h1>Horus-OSINT Cloud Assistant</h1>
     </td>
   </tr>
 </table>
