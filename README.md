@@ -1,4 +1,13 @@
-# 🦅 CISC 886: Horus-OSINT Cloud Assistant
+<table>
+  <tr>
+    <td>
+      <img src="https://github.com/user-attachments/assets/07ed572b-1dee-4cf2-b30c-2f35ca931d61" width="60"/>
+    </td>
+    <td>
+      <h1>Horus-OSINT Cloud Assistant</h1>
+    </td>
+  </tr>
+</table>
 
 **Queen's University — School of Computing**
 **Group 23 | AWS NetID Prefix:** `25bbdf-g23`
@@ -21,7 +30,7 @@ Horus-OSINT is a cloud-based conversational chatbot designed to act as an Open-S
 https://github.com/user-attachments/assets/bea69010-ebb0-4769-8837-5be100bca8b2
 
 ---
-## ⚡ Quickstart (TL;DR)
+## Quickstart (TL;DR)
 
 ```
 Step 1 → terraform apply          # Provision VPC, Subnet, SG, S3
@@ -203,7 +212,7 @@ Script    : s3://horus-25bbdf-g23-bucket/scripts/pyspark_job.py
 Arguments : --bucket horus-25bbdf-g23-bucket
 ```
 
-#### 3d. ⚠️ Terminate the cluster immediately after the step completes
+#### 3d. Terminate the cluster immediately after the step completes
 
 ```bash
 # Verify output files were written to S3
@@ -223,7 +232,7 @@ processed/test.jsonl       (~5k samples,   2.5%)
 
 1. Open `horus_osint_fine_tuning.ipynb` in Google Colab
 2. Set runtime: **Runtime → Change runtime type → T4 GPU**
-3. Add the following to **Colab Secrets** (🔑 icon in left sidebar):
+3. Add the following to **Colab Secrets** (icon in left sidebar):
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
    - `HF_TOKEN` (HuggingFace token with Llama-3 access)
@@ -349,19 +358,17 @@ curl http://localhost:11434/api/generate \
 terraform destroy -auto-approve
 ```
 
-> ⚠️ **Always run `terraform destroy` after submission** to prevent exhausting the AWS credit.
+> **Always run `terraform destroy` after submission** to prevent exhausting the AWS credit.
 
 ---
 
-## 🏆 Bonus — Enterprise-Grade Custom Web Interface
-
-> ⚙️ **Designed and deployed by Sondos Omar.**
+## Enterprise-Grade Custom Web Interface
 
 To demonstrate the full operational capabilities of the fine-tuned OSINT LLM, the team engineered and deployed a custom, production-ready Single Page Application (SPA) tailored to the HORUS cyber-intelligence brand identity. Hosted via a Dockerized Nginx server on the AWS EC2 instance, the interface connects directly to the Ollama backend API with custom CORS configuration and dynamic streaming rendering — converting raw Markdown into formatted Intelligence Report Cards in real time. Both desktop and mobile responsiveness were validated.
 
 ---
 
-## 📊 Advanced Prompt Engineering & Model Evaluation
+## Advanced Prompt Engineering & Model Evaluation
 
 The fine-tuned model was stress-tested with two multi-dataset correlation prompts designed to validate that GDELT geopolitical context and GTD tactical incident data were correctly learned and can be synthesized in a single response:
 
