@@ -1,4 +1,4 @@
-<h1 align="center">
+<h1 align="left">
   <img src="https://github.com/user-attachments/assets/07ed572b-1dee-4cf2-b30c-2f35ca931d61" width="40" style="vertical-align: middle;"/>
   CISC 886: Horus-OSINT Cloud Assistant
 </h1>
