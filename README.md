@@ -67,8 +67,8 @@ EC2 [25bbdf-g23-ec2] — t3.xlarge
 User Browser  →  http://<ec2-public-ip>
 ```
 
-<img width="2788" height="1536" alt="Horus-OSINT Diagram" src="https://github.com/user-attachments/assets/ee6f7bcb-e6cb-45ea-b871-1adde5ce7490" />
 
+<img width="2788" height="1536" alt="Final Horus-OSINT Diagram" src="https://github.com/user-attachments/assets/b975a0e5-e4e5-4792-a83e-740744d542c0" />
 
 ---
 
